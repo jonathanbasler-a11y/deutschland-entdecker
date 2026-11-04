@@ -29,6 +29,8 @@ jobs:
         run: node tools/e2e.mjs
       - name: Abläufe
         run: node tools/e2e-flows.mjs
+      - name: Tagesmission, stumme Karte, Eltern-Übersicht
+        run: node tools/e2e-features.mjs
       - name: iPad-Größen
         run: node tools/e2e-devices.mjs chromium
       - name: Offline

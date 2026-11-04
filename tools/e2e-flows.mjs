@@ -18,6 +18,7 @@ const b = await chromium.launch();
 
 async function fresh(time) {
   const ctx = await b.newContext({ viewport: { width: 1180, height: 820 }, hasTouch: true, serviceWorkers: "block" });
+  await ctx.addInitScript(() => { window.__DE_TEST = { gateMs: 150, pauseMs: 600, pauseAfterMin: 1e9 }; });
   const p = await ctx.newPage();
   if (time) await p.clock.setFixedTime(new Date(time));
   p.errors = [];
@@ -55,6 +56,15 @@ async function answerRight(p) {
   }, nm);
   await p.touchscreen.tap(x, y);
 }
+async function openParents(p) {
+  await p.click('[data-act="settings"]');
+  const g = await p.$("#gate");
+  const box = await g.boundingBox();
+  await p.mouse.move(box.x + 20, box.y + 10);
+  await p.mouse.down();
+  await p.waitForSelector(".parents", { timeout: 3000 });
+  await p.mouse.up();
+}
 async function playRound(p, max = 40) {
   let n = 0;
   while (!(await p.$(".results")) && n < max) {
@@ -73,7 +83,6 @@ async function playRound(p, max = 40) {
   await p.press("#nm", "Enter");
   check((await p.textContent(".hello h1")).includes("Hallo Max"), "Name wird begrüßt");
   check((await p.textContent(".chip.lzk")).includes("5 Tagen"), "Countdown am 5.11.: 5 Tage");
-  await p.click('[data-act="topic"][data-v="all"]');
   await p.click('[data-act="mode"][data-v="probe"]');
   const n = await playRound(p);
   check(n === 22, `Probe hat 22 Fragen (${n})`);
@@ -90,14 +99,16 @@ async function playRound(p, max = 40) {
 
   // Schwächen-Modus: zwei Runden richtig, Sterne steigen
   const starsBefore = await p.evaluate(() => Object.values(window.__DE.S.items).reduce((a, e) => a + ["choice", "tap", "write"].filter((k) => e[k] >= 1).length, 0));
+  await p.click("#more > summary");
+  await p.click('[data-act="topic"][data-v="all"]');
   await p.click('[data-act="mode"][data-v="mix"]');
   await playRound(p);
   check(await p.$(".results"), "Schwächen-Runde endet");
-  check((await p.textContent(".score")) === "12 / 12", "Schwächen-Runde 12/12");
+  check((await p.textContent(".score")) === "8 / 8", "Schwächen-Runde 8/8 (Standard: 8 Fragen)");
   await p.click('[data-act="again"]');
   await playRound(p);
   const starsAfter = await p.evaluate(() => Object.values(window.__DE.S.items).reduce((a, e) => a + ["choice", "tap", "write"].filter((k) => e[k] >= 1).length, 0));
-  check(starsAfter >= starsBefore + 20, `Sterne steigen (${starsBefore} -> ${starsAfter})`);
+  check(starsAfter >= starsBefore + 12, `Sterne steigen (${starsBefore} -> ${starsAfter})`);
   await p.click('[data-act="home"]');
   const pills = await p.$$eval(".weak .pill", (e) => e.length);
   check(pills > 0, "Startseite zeigt, was noch zu üben ist");
@@ -109,11 +120,11 @@ async function playRound(p, max = 40) {
   await p.click('[data-act="savesettings"]');
   check((await p.textContent(".hello h1")).includes("Hallo Moritz"), "Name in Einstellungen geändert");
   check((await p.evaluate(() => window.__DE.S.sound)) === false, "Ton ausgeschaltet");
-  await p.click('[data-act="settings"]');
+  await openParents(p);
   await p.click('[data-act="reset"]');
   check((await p.evaluate(() => window.__DE.S.xp)) > 0, "Erster Tipp auf Zurücksetzen löscht noch nichts");
   await p.click('[data-act="reset"]');
-  check((await p.evaluate(() => window.__DE.S.xp)) === 0 && !(await p.$(".modal")), "Zweiter Tipp setzt zurück");
+  check((await p.evaluate(() => window.__DE.S.xp)) === 0 && !!(await p.$(".home")), "Zweiter Tipp setzt zurück (in der Eltern-Übersicht)");
   check(p.errors.length === 0, "keine Konsolenfehler (1) " + p.errors.join(" | "));
   await ctx.close();
 }
@@ -129,6 +140,7 @@ async function playRound(p, max = 40) {
   });
   await p.reload();
   check((await p.textContent(".chips")).includes("🔥 2"), "Serie 2 (gestern + vorgestern, heute noch nicht)");
+  await p.click("#more > summary");
   await p.click('[data-act="topic"][data-v="states"]');
   await p.click('[data-act="mode"][data-v="choice"]');
   await answerRight(p);
