@@ -123,7 +123,8 @@ for (const [name, w, h] of DEVICES) {
   // Blitz bis zum Ende spielen (verkürzt): kein Absturz am Rundenende
   await p.click('[data-act="mode"][data-v="blitz"]');
   for (let i = 0; i < 30 && !(await p.$(".results")); i++) {
-    const nm = await p.$(".big") && await p.textContent(".big");
+    // nicht warten: die Runde kann jederzeit enden
+    const nm = await p.$eval(".big", (e) => e.textContent).catch(() => null);
     if (!nm) break;
     const [x, y] = await anchor(await byName(nm)).catch(() => [0, 0]);
     await p.touchscreen.tap(x, y).catch(() => {});
