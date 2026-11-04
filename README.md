@@ -56,5 +56,5 @@ Alle Tests laufen auch bei GitHub, bei jedem Pull Request und vor jeder Veröffe
 - Gebirge, Nord- und Ostsee: von Hand vereinfacht nachgezeichnet, also nur ungefähre Lage.
 
 Die Rohdaten (`raw/`) sind nicht im Repo. Sie liegen unter
-`nvkelso/natural-earth-vector/geojson` (`ne_10m_admin_0_countries`, `ne_10m_rivers_lake_centerlines`, `ne_10m_rivers_europe`, `ne_10m_lakes`)
-, `ne_10m_lakes_europe` (Chiemsee, Starnberger See) und `isellsoap/deutschlandGeoJSON/2_bundeslaender/3_mittel.geo.json`.
+`nvkelso/natural-earth-vector/geojson` (`ne_10m_admin_0_countries`, `ne_10m_rivers_lake_centerlines`, `ne_10m_rivers_europe`,
+`ne_10m_lakes`, `ne_10m_lakes_europe` für Chiemsee und Starnberger See) und `isellsoap/deutschlandGeoJSON/2_bundeslaender/3_mittel.geo.json`.
