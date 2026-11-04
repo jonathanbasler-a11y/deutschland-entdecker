@@ -116,30 +116,32 @@ check(await p.$(".results"), "Schreiben-Runde endet mit Ergebnis");
 await shot("results");
 await p.click('[data-act="home"]');
 
-// Allgemeines: Auswahl, Schreiben, Flagge
+// Allgemeines: Auswahl und Flagge. Es werden 10 von 11 Fragen gezogen, daher
+// so oft wiederholen, bis die Flaggen-Aufgabe vorkam (höchstens 6 Runden).
 await p.click('[data-act="topic"][data-v="general"]');
-await p.click('[data-act="mode"][data-v="choice"]');
-await shot("general-choice");
 let sawFlag = false;
-for (let i = 0; i < 10; i++) {
-  if (await p.$(".results")) break;
-  if (await p.$(".flagbox")) {
-    sawFlag = true; shot("flag");
-    for (const c of ["Schwarz", "Rot", "Gold"]) await p.click(`.fchip[data-n="${c}"]`);
-    await p.waitForSelector(".feedback.ok", { timeout: 1000 });
-    await p.waitForSelector(".feedback.ok", { state: "detached", timeout: 4000 });
-  } else {
-    const q = await p.textContent(".prompt h2");
-    const sol = await p.evaluate((q) => { const g = window.__DE.ITEMS.find((i) => i.g && i.g.q === q).g; return g.options[g.correct]; }, q);
-    await p.click(`.opt:text-is("${sol}")`);
-    await p.waitForSelector(".opt.ok", { timeout: 1000 });
-    await p.waitForSelector(".results, .opt:not(.ok):not(.bad)", { timeout: 4000 }).catch(() => {});
-    await p.waitForTimeout(1100);
+for (let round = 0; round < 6 && !sawFlag; round++) {
+  await p.click(round === 0 ? '[data-act="mode"][data-v="choice"]' : '[data-act="again"]');
+  if (round === 0) await shot("general-choice");
+  for (let i = 0; i < 11; i++) {
+    if (await p.$(".results")) break;
+    if (await p.$(".flagbox")) {
+      sawFlag = true; await shot("flag");
+      for (const c of ["Schwarz", "Rot", "Gold"]) await p.click(`.fchip[data-n="${c}"]`);
+      await p.waitForSelector(".feedback.ok", { timeout: 1000 });
+      await p.waitForSelector(".feedback.ok", { state: "detached", timeout: 4000 });
+    } else {
+      const q = await p.textContent(".prompt h2");
+      const sol = await p.evaluate((q) => { const g = window.__DE.ITEMS.find((i) => i.g && i.g.q === q).g; return g.options[g.correct]; }, q);
+      await p.click(`.opt:text-is("${sol}")`);
+      await p.waitForSelector(".opt.ok", { timeout: 1000 });
+      await p.waitForTimeout(1100);
+    }
   }
+  await p.waitForSelector(".results", { timeout: 5000 }).catch(() => {});
+  check(await p.$(".results"), "Allgemeines endet mit Ergebnis");
 }
 check(sawFlag, "Flaggen-Aufgabe kam vor");
-await p.waitForSelector(".results", { timeout: 5000 }).catch(() => {});
-check(await p.$(".results"), "Allgemeines endet mit Ergebnis");
 await p.click('[data-act="home"]');
 
 // Allgemeines schreiben: Zahlen
