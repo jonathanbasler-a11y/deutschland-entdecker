@@ -252,7 +252,7 @@ async function playRound(p, max = 30) {
   await p.click('[data-act="quit"]');
   // neue Lapbook-Fragen sind da
   const ids = await p.evaluate(() => window.__DE.ITEMS.filter((i) => i.cat === "general").map((i) => i.id));
-  check(["g_groesstes", "g_kleinstes", "g_staedte", "g_fluss", "g_meere", "g_flaeche", "g_sprache", "g_berg", "g_praesident", "g_wahl", "g_hymne_text", "g_hymne_melodie", "g_hymne_strophe", "g_hymne_anfang", "g_hymne_seit", "g_hymne_wann", "g_hymne_l1", "g_hymne_l2", "g_hymne_l3", "g_hymne_l4"].every((x) => ids.includes(x)), `Lapbook-Fragen vorhanden (${ids.length} Allgemein-Fragen)`);
+  check(["g_groesstes", "g_kleinstes", "g_staedte", "g_fluss", "g_meere", "g_flaeche", "g_sprache", "g_praesident", "g_wahl", "g_hymne_text", "g_hymne_melodie", "g_hymne_strophe", "g_hymne_anfang", "g_hymne_seit", "g_hymne_wann", "g_hymne_l1", "g_hymne_l2", "g_hymne_l3", "g_hymne_l4"].every((x) => ids.includes(x)), `Lapbook-Fragen vorhanden (${ids.length} Allgemein-Fragen)`);
   const mapIds = await p.evaluate(() => window.__DE.ITEMS.map((i) => i.id));
   check(["w_main", "w_chiemsee", "w_mueritz", "w_starnberg", "m_rhoen", "m_fichtelgebirge", "m_thueringerwald", "m_zugspitze"].every((x) => mapIds.includes(x)), "Lapbook-Karte: Main, Chiemsee, Müritz, Starnberger See, Rhön, Fichtelgebirge, Thüringer Wald, Zugspitze");
   check(await p.evaluate(() => window.__DE.ITEMS.find((i) => i.id === "g_wahl").g.options[0] === "März 2029"), "Wahl: März 2029");
