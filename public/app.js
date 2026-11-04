@@ -1,6 +1,6 @@
 "use strict";
 (function () {
-  const { judge, judgeNumber, gradeFor, sample, shuffle } = DELogic;
+  const { judge, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
   const TEST = window.__DE_TEST || {};
@@ -397,7 +397,10 @@
 
   /* ================= Spielrunden ================= */
   const nameList = (it) => [it.name].concat(it.alts);
-  const weight = (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0);
+  // Schreibfallen aus dem Lapbook kommen beim Schreiben öfter dran, bis sie sicher sitzen
+  const trap = (it, skill) => !!LAPBOOK_SPELLING[it.id] && it.skills.includes("write") && (skill === "write" || !skill) && lvl(it.id, "write") < 2;
+  const weightFor = (skill) => (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0) + (trap(it, skill) ? 3 : 0);
+  const weight = weightFor(null);
   const roundLen = () => [5, 8, 12].includes(+S.roundLen) ? +S.roundLen : 8;
   function poolFor(topic, skill) {
     let l = topic === "all" ? ITEMS : ITEMS.filter((i) => i.cat === topic);
@@ -410,12 +413,12 @@
         const skill = it.cat === "general" ? (it.skills.includes("write") && rnd() > 0.5 ? "write" : "choice") : rnd() > 0.4 ? "write" : "tap";
         q.push({ it, skill });
       });
-      add("general", 5); add("neighbors", 4); add("states", 6); add("water", 4); add("mountains", 3);
+      add("general", 6); add("neighbors", 4); add("states", 5); add("water", 4); add("mountains", 3);
       return shuffle(q);
     }
     if (mode === "mission") {
       const sk = MISSION[Math.min(2, missionStep())].skill;
-      return sample(poolFor("all", sk), MISSION_LEN, weight).map((it) => ({ it, skill: sk }));
+      return sample(poolFor("all", sk), MISSION_LEN, weightFor(sk)).map((it) => ({ it, skill: sk }));
     }
     if (mode === "blitz") return shuffle(poolFor(topic, "tap")).concat(shuffle(poolFor(topic, "tap"))).map((it) => ({ it, skill: "tap" }));
     if (mode === "mix") {
@@ -425,7 +428,9 @@
         return { it, skill: c[Math.floor(Math.random() * c.length)] };
       });
     }
-    return sample(poolFor(topic, mode), roundLen(), weight).map((it) => ({ it, skill: mode }));
+    let pool = poolFor(topic, mode), n = roundLen(), first = [];
+    if (TEST.forceFirst && pool.some((i) => i.id === TEST.forceFirst)) { first = [BY_ID[TEST.forceFirst]]; pool = pool.filter((i) => i.id !== TEST.forceFirst); n--; }
+    return first.concat(sample(pool, n, weightFor(mode))).map((it) => ({ it, skill: mode }));
   }
 
   function gameShell(mode) {
@@ -605,12 +610,21 @@
       finishWrite(q, j, inp, it.name, () => { clearHL(); highlight(it, "ok"); labels([it]); }, wrongTip(it, j.kind));
     };
   }
-  // gemeinsame Auswertung für Schreib-Aufgaben
-  function finishWrite(q, j, inp, correct, reveal, tip) {
+  // Deine Schreibweise und die richtige untereinander, falsche Buchstaben markiert
+  function diffHtml(input, correct) {
+    if (!String(input || "").trim() || !correct) return "";
+    const d = diffMark(input, correct);
+    const mine = d.mine.map(([c, ok]) => (ok ? esc(c) : `<del>${esc(c)}</del>`)).join("");
+    const right = d.right.map(([c, ok]) => (ok ? esc(c) : `<mark>${esc(c)}</mark>`)).join("");
+    return `<div class="diff"><div><small>Du:</small><span>${mine}</span></div><div><small>Richtig:</small><span>${right}</span></div></div>`;
+  }
+  // gemeinsame Auswertung für Schreib-Aufgaben (target: Schreibweise für den Buchstaben-Vergleich)
+  function finishWrite(q, j, inp, correct, reveal, tip, target) {
+    if (target === undefined) target = correct;
     if (j.ok) {
       R.lock = true; inp.classList.add("ok");
       reveal();
-      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig: ${esc(correct)}</small>` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(correct)}</small>` : "";
+      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig:</small>${diffHtml(inp.value, j.canonical || target)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical || correct)}</small>` : "";
       fb("ok", pr() + note);
       commit(q, R.attempt === 0 ? "first" : "second");
       return later(next, note ? 1800 : 1000);
@@ -622,7 +636,7 @@
       R.lock = true; R.waitNext = true;
       const ws = $("#ws"); ws.textContent = "Weiter"; ws.classList.add("next");
       reveal();
-      fb("bad", `Richtig ist: ${esc(correct)}${j.kind === "close" ? "<small>Das war knapp daneben.</small>" : ""}`);
+      fb("bad", `Richtig ist: ${esc(correct)}${j.kind === "close" ? "<small>Das war knapp daneben.</small>" : ""}${target ? diffHtml(inp.value, target) : ""}`);
       commit(q, "fail");
       return;
     }
@@ -659,7 +673,7 @@
       if (R.lock) { if (R.waitNext) next(); return; }
       const j = w.num ? judgeNumber(inp.value, w.num, w.show) : judge(inp.value, w.answers);
       if (j.kind === "empty") return inp.focus();
-      finishWrite(q, j, inp, w.show, () => {}, j.kind === "close" ? "Fast! Schau noch einmal genau auf die Buchstaben." : "Nicht ganz. Überlege noch einmal.");
+      finishWrite(q, j, inp, w.show, () => {}, j.kind === "close" ? "Fast! Schau noch einmal genau auf die Buchstaben." : "Nicht ganz. Überlege noch einmal.", w.num ? null : closest(inp.value, w.answers));
     };
   }
 
@@ -704,10 +718,13 @@
   }
   function startBlank(cat, onlyIds) {
     closeModal();
-    // Nummern von Nord nach Süd, wie auf einem Arbeitsblatt
-    const all = catItems(cat).slice().sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0]);
+    // Nummern wie im Lapbook (Gebirge, Gewässer), sonst von Nord nach Süd wie auf einem Arbeitsblatt
+    const items = catItems(cat);
+    const lapbook = items.every((it) => BLANK_NUM[it.id]);
     const nums = {};
-    all.forEach((it, i) => { nums[it.id] = i + 1; });
+    if (lapbook) items.forEach((it) => { nums[it.id] = BLANK_NUM[it.id]; });
+    else items.slice().sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0]).forEach((it, i) => { nums[it.id] = i + 1; });
+    const all = items.slice().sort((a, b) => nums[a.id] - nums[b.id]);
     const ask = onlyIds ? all.filter((it) => onlyIds.includes(it.id)) : all;
     view = "game";
     R = { tok: Math.random(), mode: "blank", cat, all, nums, q: ask, queue: ask.map((it) => it.id), status: {}, results: [], xp: 0, hits: 0, t0: Date.now(), i: 0, onlyIds };
@@ -717,7 +734,7 @@
     const svg = $(".stage .map");
     svg.classList.toggle("show-mtn", cat === "mountains");
     svg.classList.add("focus", "blankmap");
-    $("#panel").innerHTML = `<div class="prompt"><small>Stumme Karte · ${CATS[cat].name}</small><h2>Wie heißt <span class="numbadge" id="bnum"></span>?</h2></div>
+    $("#panel").innerHTML = `<div class="prompt"><small>Stumme Karte · ${CATS[cat].name}${lapbook ? " · Nummern wie im Lapbook" : ""}</small><h2>Wie heißt <span class="numbadge" id="bnum"></span>?</h2></div>
       <div class="seg" role="group" aria-label="Antwortart"><button data-a="bm" data-v="write" class="segbtn" aria-pressed="false">✏️ Schreiben</button><button data-a="bm" data-v="bank" class="segbtn" aria-pressed="false">🔤 Wortkasten</button></div>
       <div id="bans"></div><div id="fb"></div><div class="numgrid" id="bgrid" aria-label="Alle Nummern"></div>`;
     R.onPanel = blankPanel;
@@ -787,11 +804,11 @@
     drawNums();
     later(blankNext, kindNote ? 1500 : 800);
   }
-  function blankFailed(it, skill) {
+  function blankFailed(it, skill, typed) {
     R.lock = true; R.waitNext = true;
     R.status[it.id] = "bad";
     clearHL(); highlight(it, "ok");
-    fb("bad", `Nummer ${R.nums[it.id]} ist: ${esc(it.name)}${S.blankMode === "bank" ? `<button class="btn" data-a="bnext" id="bnx" type="button" style="margin-top:10px;width:100%">Weiter</button>` : ""}`);
+    fb("bad", `Nummer ${R.nums[it.id]} ist: ${esc(it.name)}${typed ? diffHtml(typed, it.name) : ""}${S.blankMode === "bank" ? `<button class="btn" data-a="bnext" id="bnx" type="button" style="margin-top:10px;width:100%">Weiter</button>` : ""}`);
     commit({ it, skill }, "fail");
     drawNums();
     const bs = $("#bs");
@@ -805,13 +822,13 @@
     if (j.kind === "empty") return inp.focus();
     if (j.ok) {
       inp.classList.add("ok");
-      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig: ${esc(it.name)}</small>` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(it.name)}</small>` : "";
+      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig:</small>${diffHtml(inp.value, j.canonical)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical)}</small>` : "";
       return blankSolved(it, "write", note);
     }
     R.attempt++;
     inp.classList.add("bad");
     setTimeout(() => inp.classList.remove("bad"), 600);
-    if (R.attempt >= 2) return blankFailed(it, "write");
+    if (R.attempt >= 2) return blankFailed(it, "write", inp.value);
     tone("bad");
     fb("hint", wrongTip(it, j.kind));
     inp.select();
@@ -951,6 +968,8 @@
         <div class="bars">${cats.map((c) => { const s = catStars(c); const p = s.max ? Math.round((s.got / s.max) * 100) : 0; return `<div class="barrow"><span>${CATS[c].name}</span><div class="bar"><i style="width:${p}%"></i></div><b>${s.full}/${s.n} sicher</b></div>`; }).join("")}</div>
       </section>
       <section class="card"><h2>Wackelt noch</h2>${never ? `<p class="muted" style="margin-bottom:8px">${never} von ${ITEMS.length} Begriffen wurden noch nie geübt.</p>` : ""}${weak.length ? `<table class="tbl"><thead><tr><th>Begriff</th><th>Sterne</th><th>Fehler</th><th>Fehlt noch</th></tr></thead><tbody>${weak.map((it) => `<tr><td>${esc(it.name)}</td><td>${"★".repeat(stars(it))}${"☆".repeat(it.skills.length - stars(it))}</td><td>${wrongs(it)}</td><td>${miss(it) || "–"}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Bisher wackelt nichts von dem, was schon geübt wurde.</p>`}</section>
+      <section class="card"><h2>Schreibfallen aus dem Lapbook</h2><p class="muted" style="margin-bottom:8px">So stand es im Lapbook. Diese Wörter kommen beim Schreiben öfter dran, bis sie sicher sitzen.</p>
+        <table class="tbl"><thead><tr><th>Richtig</th><th>Im Lapbook</th><th>Schreiben</th></tr></thead><tbody>${Object.entries(LAPBOOK_SPELLING).map(([id, seen]) => { const it = BY_ID[id]; const l = lvl(id, "write"); const label = it.cat === "general" ? (it.g.write ? it.g.write.show : it.name) : it.name; return `<tr><td>${esc(label)}</td><td class="muted">${esc(seen)}</td><td class="${l >= 2 ? "yes" : "no"}">${l >= 2 ? "✓ sicher" : l === 1 ? "fast" : "–"}</td></tr>`; }).join("")}</tbody></table></section>
       <section class="card"><h2>Übungszeit, letzte 7 Tage</h2>
         <div class="days">${days.map((d) => { const m = S.mins[d] || 0; const dt = new Date(d + "T12:00:00"); return `<div class="day"><div class="col"><i style="height:${Math.round((m / maxMin) * 100)}%"></i></div><b>${Math.round(m)}</b><small>${wd[dt.getDay()]}</small></div>`; }).join("")}</div>
         <p class="muted">Minuten pro Tag. Insgesamt ${Math.round(totalMin)} Minuten, ${total()} Aufgaben, ${S.missionsDone || 0} Tagesmissionen, Serie ${streak()} ${streak() === 1 ? "Tag" : "Tage"}.</p>

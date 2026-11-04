@@ -17,6 +17,8 @@ let fails = 0;
 const check = (c, m) => { if (!c) { fails++; console.log("FAIL", m); } };
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, serviceWorkers: "block" });
+// Flaggen-Frage zuerst stellen, wenn sie in der Runde vorkommen kann (sonst bei 25 Fragen Zufall)
+await ctx.addInitScript(() => { window.__DE_TEST = { forceFirst: "g_flagge" }; });
 const p = await ctx.newPage();
 const errors = [];
 p.on("pageerror", (e) => errors.push(String(e)));

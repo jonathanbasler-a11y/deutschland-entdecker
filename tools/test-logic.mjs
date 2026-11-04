@@ -20,8 +20,31 @@ assert.equal(j("Hesen", ["Hessen"]).kind, "close");
 assert.equal(j("Hamburg", ["Bremen"]).kind, "wrong");
 assert.equal(j("Rhein", ["Donau"]).kind, "wrong");
 assert.equal(j("", ["Harz"]).kind, "empty");
-// kurze Namen: ein Tippfehler zählt nicht als "knapp"
-assert.equal(j("Harx", ["Harz"]).kind, "wrong");
+// kurze Namen (ab 4 Buchstaben): ein Tippfehler ist "knapp", aber nicht richtig
+assert.equal(j("Harx", ["Harz"]).kind, "close");
+assert.equal(j("Mertz", ["Merz", "Friedrich Merz"]).kind, "close");
+assert.equal(j("Rot", ["Rom"]).kind, "wrong");
+// Schreibfehler aus dem Lapbook
+assert.equal(j("Denemark", ["Dänemark"]).kind, "close");
+assert.equal(j("Niderlande", ["Niederlande"]).kind, "close");
+assert.equal(j("Schweitz", ["Schweiz"]).kind, "close");
+assert.equal(j("Luchsenburg", ["Luxemburg"]).ok, false);
+assert.equal(j("Reien", ["Rhein"]).ok, false);
+assert.equal(j("weser", ["Weser"]).kind, "case");
+// Buchstaben-Vergleich
+const marked = (d, side) => d[side].filter(([, ok]) => !ok).map(([c]) => c).join("");
+let d = L.diffMark("Denemark", "Dänemark");
+assert.equal(marked(d, "right"), "ä");
+assert.equal(marked(d, "mine"), "e");
+d = L.diffMark("Schweitz", "Schweiz");
+assert.equal(marked(d, "right"), "");
+assert.equal(marked(d, "mine"), "t");
+d = L.diffMark("Bertien", "Berlin");
+assert.equal(marked(d, "right"), "l");
+d = L.diffMark("weser", "Weser");
+assert.equal(marked(d, "right") + marked(d, "mine"), "", "nur Groß/Klein ist kein Buchstabenfehler");
+assert.equal(L.diffMark("", "Harz").right.length, 4);
+assert.equal(L.closest("Hamburk", ["Berlin", "Hamburg", "Bremen"]), "Hamburg");
 // Zahlen
 const num = (i) => L.judgeNumber(i, [83, 84, 85], "ca. 84 Millionen").ok;
 assert.ok(num("84") && num("84 Mio") && num("84 Mio.") && num("84 Millionen") && num("83") && num("84.000.000") && num("84000000"));

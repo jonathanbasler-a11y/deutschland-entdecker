@@ -43,7 +43,7 @@
     }
     for (const name of names) {
       const t = norm(name);
-      if (t.length >= 5 && lev(t, n) <= 1) return { ok: false, kind: "close", canonical: names[0] };
+      if (t.length >= 4 && lev(t, n) <= 1) return { ok: false, kind: "close", canonical: names[0] };
     }
     return { ok: false, kind: "wrong", canonical: names[0] };
   }
@@ -99,7 +99,31 @@
     return a;
   }
 
-  const api = { norm, lev, judge, judgeNumber, gradeFor, sample, shuffle };
+  // Vergleicht Eingabe und richtige Schreibweise Buchstabe für Buchstabe (längste gemeinsame Folge).
+  // mine: [Zeichen, stimmt?] der Eingabe (falsch = überflüssig), right: [Zeichen, stimmt?] (falsch = fehlt/anders).
+  function diffMark(input, correct) {
+    const a = [...String(input || "").trim()], b = [...String(correct)];
+    const A = a.map((c) => c.toLowerCase()), B = b.map((c) => c.toLowerCase());
+    const m = A.length, n = B.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const okA = new Array(m).fill(false), okB = new Array(n).fill(false);
+    let i = 0, j = 0;
+    while (i < m && j < n) {
+      if (A[i] === B[j]) { okA[i] = okB[j] = true; i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+      else j++;
+    }
+    return { mine: a.map((c, k) => [c, okA[k]]), right: b.map((c, k) => [c, okB[k]]) };
+  }
+
+  // Aus mehreren richtigen Antworten die, die der Eingabe am ähnlichsten ist.
+  function closest(input, names) {
+    const n = norm(input);
+    return names.slice().sort((x, y) => lev(norm(x), n) - lev(norm(y), n))[0];
+  }
+
+  const api = { norm, lev, judge, judgeNumber, gradeFor, sample, shuffle, diffMark, closest };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DELogic = api;
 })(typeof self !== "undefined" ? self : this);

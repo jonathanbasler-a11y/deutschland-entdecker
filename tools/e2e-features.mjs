@@ -193,6 +193,50 @@ async function playRound(p, max = 30) {
   await ctx.close();
 }
 
+// 3b) Lapbook: Nummern wie im Lapbook, Buchstaben-Vergleich bei Schreibfehlern
+{
+  const { ctx, p } = await fresh();
+  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blank"][data-v="water"]');
+  check((await p.$eval("#panel", (e) => e.dataset.cur)) === "w_rhein" && (await p.textContent("#bnum")) === "Nummer 1", "Gewässer: Nummer 1 ist der Rhein (wie im Lapbook)");
+  check((await p.$$eval("#bgrid .nb-cell", (e) => e.map((x) => x.textContent).join(","))) === "1,2,3,4,6,7,11,12", "Gewässer-Nummern wie im Lapbook (5 Main fehlt, weil nicht in der LZK)");
+  check((await p.textContent(".prompt small")).includes("wie im Lapbook"), "Hinweis: Nummern wie im Lapbook");
+  await p.click('[data-act="quit"]');
+  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blank"][data-v="mountains"]');
+  check((await p.$$eval("#bgrid .nb-cell", (e) => e.map((x) => x.textContent).join(","))) === "1,2,3,4,5,7,9", "Gebirge-Nummern wie im Lapbook");
+  check((await p.$eval("#panel", (e) => e.dataset.cur)) === "m_bayerwald", "Gebirge: Nummer 1 ist der Bayerische Wald");
+  await p.click('[data-act="quit"]');
+  // Nachbarländer: Nummer 1 ist Dänemark; „Denemark“ wie im Lapbook
+  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blank"][data-v="neighbors"]');
+  check((await p.$eval("#panel", (e) => e.dataset.cur)) === "n_dk", "Nachbarländer: Nummer 1 ist Dänemark");
+  await p.fill("#bi", "Denemark"); await p.press("#bi", "Enter");
+  check((await p.textContent("#fb")).includes("Fast"), "„Denemark“: Fast!");
+  await p.fill("#bi", "Denemark"); await p.press("#bi", "Enter");
+  check((await p.$$eval(".diff mark", (e) => e.map((x) => x.textContent).join(""))) === "ä", "Vergleich markiert das fehlende ä");
+  check((await p.$$eval(".diff del", (e) => e.map((x) => x.textContent).join(""))) === "e", "Vergleich streicht das falsche e");
+  await shot(p, "diff");
+  await p.click('[data-act="quit"]');
+  // Allgemeines schreiben: „Mertz“
+  await p.click("#more > summary");
+  await p.click('[data-act="topic"][data-v="general"]');
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = "g_kanzler"; });
+  await p.click('[data-act="mode"][data-v="write"]');
+  check((await p.textContent("#wprompt")).includes("Bundeskanzler"), "Erste Schreibfrage: Bundeskanzler");
+  await p.fill("#wi", "Mertz"); await p.press("#wi", "Enter");
+  check((await p.textContent("#fb")).includes("Fast"), "„Mertz“: Fast!");
+  await p.fill("#wi", "Mertz"); await p.press("#wi", "Enter");
+  check((await p.$$eval(".diff del", (e) => e.map((x) => x.textContent).join(""))) === "t", "Vergleich streicht das t in Mertz");
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = null; });
+  await p.click('[data-act="quit"]');
+  // neue Lapbook-Fragen sind da
+  const ids = await p.evaluate(() => window.__DE.ITEMS.filter((i) => i.cat === "general").map((i) => i.id));
+  check(["g_groesstes", "g_kleinstes", "g_staedte", "g_fluss", "g_meere", "g_flaeche", "g_sprache", "g_berg", "g_praesident", "g_wahl", "g_hymne_text", "g_hymne_melodie", "g_hymne_strophe", "g_hymne_anfang"].every((x) => ids.includes(x)), `Lapbook-Fragen vorhanden (${ids.length} Allgemein-Fragen)`);
+  check(p.errors.length === 0, "keine Konsolenfehler (Lapbook) " + p.errors.join(" | "));
+  await ctx.close();
+}
+
 // 4) Eltern-Übersicht: Tür, Inhalte, Einstellungen wirken
 {
   const { ctx, p } = await fresh();
@@ -226,6 +270,8 @@ async function playRound(p, max = 30) {
   const txt = await p.textContent(".parents");
   check(/Bereit für die LZK/.test(txt) && /\d+ %/.test(txt), "Zeigt Bereitschaft in Prozent");
   check((await p.$$(".barrow")).length === 5, "5 Themen-Balken");
+  const trapRows = await p.$$eval(".parents section", (secs) => { const s = secs.find((x) => x.textContent.includes("Schreibfallen aus dem Lapbook")); return s ? s.querySelectorAll("tbody tr").length : 0; });
+  check(trapRows === 15, `Schreibfallen aus dem Lapbook: 15 Wörter (${trapRows})`);
   check((await p.$$(".day")).length === 7, "7 Tage Übungszeit");
   check((await p.$$eval(".parents section:nth-of-type(2) tbody tr", (r) => r.length)) > 0, "Liste 'Wackelt noch' hat Einträge");
   await shot(p, "parents");
