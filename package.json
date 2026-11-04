@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Lern-App fürs iPad zur LZK Deutschland",
   "scripts": {
-    "test": "node tools/test-logic.mjs",
+    "test": "node tools/test-logic.mjs && node tools/test-rechnen.mjs",
     "build:map": "node tools/build-map.mjs"
   },
   "private": true,

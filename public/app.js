@@ -12,10 +12,16 @@
     // Einstellungen aus der Eltern-Übersicht
     roundLen: 8, calm: false, autoRead: false, showBlitz: true, lzkDate: LZK_DATE,
     mission: { day: "", step: 0 }, missionsDone: 0, blankMode: "write", ui: { more: false },
+    subject: "de", // gewähltes Fach: "de" (Deutschland) oder eines aus DE_FAECHER
   });
   let S = defaults();
   try { const raw = JSON.parse(localStorage.getItem(KEY) || "null"); if (raw) S = Object.assign(defaults(), raw); } catch (e) { /* ohne Speicher weiter */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* egal */ } };
+
+  // Weitere Fächer (z. B. Kopfrechnen) melden sich über window.DE_FAECHER an, siehe unten "Fächer".
+  let FAECH = [];
+  const fachOf = (id) => FAECH.find((f) => f.id === id);
+  const fachFor = (name) => FAECH.find((f) => name && name.startsWith(f.prefix));
 
   const pad = (n) => String(n).padStart(2, "0");
   const dayKey = (d = new Date()) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
@@ -45,15 +51,15 @@
     e.t = dayKey();
     S.days[dayKey()] = (S.days[dayKey()] || 0) + 1;
   }
+  // Die Serie zählt Tage, an denen in irgendeinem Fach geübt wurde.
+  const active = (k) => !!S.days[k] || FAECH.some((f) => f.activeOn && f.activeOn(k));
   function streak() {
     let n = 0;
     const d = new Date();
-    if (!S.days[dayKey(d)]) d.setDate(d.getDate() - 1);
-    while (S.days[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); }
+    if (!active(dayKey(d))) d.setDate(d.getDate() - 1);
+    while (active(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
     return n;
   }
-  const rankOf = (xp) => RANKS.reduce((r, x) => (xp >= x.xp ? x : r), RANKS[0]);
-  const nextRank = (xp) => RANKS.find((r) => r.xp > xp);
   function daysToLZK() {
     const a = new Date(dayKey() + "T00:00:00"), b = new Date((S.lzkDate || LZK_DATE) + "T00:00:00");
     return Math.round((b - a) / 864e5);
@@ -88,8 +94,9 @@
     { id: "probe1", icon: "🏆", name: "Fehlerfrei", desc: "Probe-LZK ohne einen Fehler", ok: () => S.probes.some((p) => p.pct === 100) },
     { id: "alles", icon: "👑", name: "Deutschland-Profi", desc: "Alles mit 3 Sternen", ok: () => ITEMS.every((i) => stars(i) === i.skills.length) },
   ];
+  const allBadges = () => BADGES.concat(...FAECH.map((f) => f.badges || []));
   function checkBadges() {
-    for (const b of BADGES) {
+    for (const b of allBadges()) {
       if (!S.badges[b.id] && b.ok()) {
         S.badges[b.id] = dayKey();
         save();
@@ -121,13 +128,14 @@
       }
     } catch (e) { /* kein Ton */ }
   }
-  function say(text) {
+  function say(text, done) {
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "de-DE"; u.rate = 0.9;
+      if (done) { u.onend = done; u.onerror = done; }
       speechSynthesis.speak(u);
-    } catch (e) { /* keine Sprachausgabe */ }
+    } catch (e) { if (done) done(); }
   }
   const cv = document.getElementById("confetti");
   let parts = [], raf = 0;
@@ -239,6 +247,8 @@
 
   function render() {
     applyCalm();
+    const f = fachFor(view);
+    if (f) return f.render(view);
     if (view === "home") return renderHome();
     if (view === "discover") return renderDiscover();
     if (view === "badges") return renderBadges();
@@ -265,9 +275,29 @@
     return `<ol class="path">${MISSION.map((m, i) => `<li class="${i < step ? "done" : i === step ? "now" : ""}"><span class="dot">${i < step ? "✓" : m.icon}</span><span>${m.name}</span></li>`).join("")}<li class="${step >= 3 ? "done" : ""}"><span class="dot">🏆</span><span>Geschafft</span></li></ol>`;
   }
 
+  /* ---------- Kopfzeile und Fach-Reiter (für alle Fächer) ---------- */
+  function subjectTabs() {
+    if (!FAECH.length) return "";
+    const list = [{ id: "de", icon: "🗺️", name: "Deutschland" }].concat(FAECH);
+    return `<nav class="subjects" aria-label="Fach">${list.map((f) => `<button class="subj" data-act="subject" data-v="${f.id}" aria-pressed="${S.subject === f.id}"><span class="ico">${f.icon}</span>${esc(f.name)}</button>`).join("")}</nav>`;
+  }
+  function header(o) {
+    const r = o.ranks.reduce((a, x) => (o.xp >= x.xp ? x : a), o.ranks[0]), nr = o.ranks.find((x) => x.xp > o.xp);
+    const pct = nr ? Math.round(((o.xp - r.xp) / (nr.xp - r.xp)) * 100) : 100;
+    return `
+      <div class="top">
+        <div class="hello"><h1>${S.name ? "Hallo " + esc(S.name) + "!" : o.title}</h1>
+          <div><span class="rank">${r.name}</span> · ${o.xp} Punkte${nr ? ` · noch ${nr.xp - o.xp} bis ${nr.name}` : ""}</div>
+          <div class="xpbar"><i style="width:${pct}%"></i></div></div>
+        ${o.chips}
+        <button class="icon-btn" data-act="badges" aria-label="Abzeichen">🏅</button>
+        <button class="icon-btn" data-act="settings" aria-label="Einstellungen">⚙️</button>
+      </div>${subjectTabs()}`;
+  }
+
   function renderHome() {
-    const r = rankOf(S.xp), nr = nextRank(S.xp);
-    const pct = nr ? Math.round(((S.xp - r.xp) / (nr.xp - r.xp)) * 100) : 100;
+    const fach = S.subject !== "de" && fachOf(S.subject);
+    if (fach) { fach.home(); if (!S.askedName) nameModal(); return; }
     const tp = S.topic;
     const canTap = tp !== "general";
     const step = missionStep();
@@ -281,15 +311,7 @@
     const missionBtn = step < 3
       ? `<button class="mode big" data-act="mission"><span class="ico">${MISSION[step].icon}</span><div><b>${step === 0 ? "Los geht's" : "Weiter"}: Etappe ${step + 1} von 3</b><br><span>${MISSION[step].text} ${MISSION_LEN} Aufgaben, ca. 3 Minuten.</span></div></button>`
       : `<div class="done-msg"><b>Tagesmission geschafft! 🏆</b><span>Super! Du kannst für heute aufhören. Wenn du magst, übe die stumme Karte.</span></div>`;
-    app.innerHTML = `
-      <div class="top">
-        <div class="hello"><h1>${S.name ? "Hallo " + esc(S.name) + "!" : "Deutschland-Entdecker"}</h1>
-          <div><span class="rank">${r.name}</span> · ${S.xp} Punkte${nr ? ` · noch ${nr.xp - S.xp} bis ${nr.name}` : ""}</div>
-          <div class="xpbar"><i style="width:${pct}%"></i></div></div>
-        ${topChips()}
-        <button class="icon-btn" data-act="badges" aria-label="Abzeichen">🏅</button>
-        <button class="icon-btn" data-act="settings" aria-label="Einstellungen">⚙️</button>
-      </div>
+    app.innerHTML = `${header({ title: "Deutschland-Entdecker", ranks: RANKS, xp: S.xp, chips: topChips() })}
       <div class="home">
         <section class="card"><h2>Meine Karte</h2><div class="minimap" id="mini">${mapMarkup()}</div>
           <div class="legend"><span>Je mehr Sterne, desto bunter die Karte.</span></div>
@@ -391,8 +413,11 @@
 
   /* ---------- Abzeichen ---------- */
   function renderBadges() {
+    const grid = (list) => `<div class="badges">${list.map((b) => `<div class="badge ${S.badges[b.id] ? "got" : ""}"><div class="medal">${b.icon}</div><div><b>${b.name}</b><small>${b.desc}</small></div></div>`).join("")}</div>`;
+    let groups = [{ id: "de", title: "🗺️ Deutschland", list: BADGES }].concat(FAECH.map((f) => ({ id: f.id, title: f.icon + " " + f.name, list: f.badges || [] })));
+    groups = groups.filter((g) => g.id === S.subject).concat(groups.filter((g) => g.id !== S.subject));
     app.innerHTML = `<div class="results"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Abzeichen</h1></div>
-      <div class="badges">${BADGES.map((b) => `<div class="badge ${S.badges[b.id] ? "got" : ""}"><div class="medal">${b.icon}</div><div><b>${b.name}</b><small>${b.desc}</small></div></div>`).join("")}</div></div>`;
+      ${FAECH.length ? groups.map((g) => `<h2 class="bgroup">${g.title}</h2>${grid(g.list)}`).join("") : grid(BADGES)}</div>`;
   }
 
   /* ================= Spielrunden ================= */
@@ -929,7 +954,15 @@
   }
 
   /* ================= Eltern-Übersicht ================= */
+  let ptab = "de";
+  const parentTabs = () => FAECH.length ? `<div class="seg ptabs" role="group" aria-label="Fach">${[{ id: "de", icon: "🗺️", name: "Deutschland" }].concat(FAECH).map((f) => `<button class="segbtn" data-act="ptab" data-v="${f.id}" aria-pressed="${ptab === f.id}">${f.icon} ${esc(f.name)}</button>`).join("")}</div>` : "";
   function renderParents() {
+    const fach = ptab !== "de" && fachOf(ptab);
+    if (fach) {
+      app.innerHTML = `<div class="results parents"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Eltern-Übersicht</h1></div>${parentTabs()}${fach.parents()}</div>`;
+      fach.bindParents();
+      return;
+    }
     const cats = ["states", "neighbors", "water", "mountains", "general"];
     const all = catStars("all");
     const ready = all.max ? Math.round((all.got / all.max) * 100) : 0;
@@ -945,7 +978,7 @@
     const miss = (it) => it.skills.filter((sk) => lvl(it.id, sk) < 1).map((sk) => SKILL_NAME[sk]).join(", ");
     const cell = (it, sk) => it.skills.includes(sk) ? (lvl(it.id, sk) >= 1 ? `<td class="yes">✓</td>` : `<td class="no">–</td>`) : `<td class="na"></td>`;
     const totalMin = Object.values(S.mins).reduce((a, b) => a + b, 0);
-    app.innerHTML = `<div class="results parents"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Eltern-Übersicht</h1></div>
+    app.innerHTML = `<div class="results parents"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Eltern-Übersicht</h1></div>${parentTabs()}
       <section class="card"><h2>Bereit für die LZK</h2>
         <div class="ready"><div class="big-pct">${ready} %</div><p class="muted">Anteil aller Sterne. Ein Begriff sitzt sicher, wenn er ihn auswählen, auf der Karte finden und schreiben kann (3 Sterne).</p></div>
         <div class="bars">${cats.map((c) => { const s = catStars(c); const p = s.max ? Math.round((s.got / s.max) * 100) : 0; return `<div class="barrow"><span>${CATS[c].name}</span><div class="bar"><i style="width:${p}%"></i></div><b>${s.full}/${s.n} sicher</b></div>`; }).join("")}</div>
@@ -993,7 +1026,7 @@
     let t = null, t0 = 0, raf2 = 0;
     const stop = () => { clearTimeout(t); cancelAnimationFrame(raf2); t = null; $("#gfill").style.width = "0"; };
     const grow = () => { $("#gfill").style.width = Math.min(100, ((Date.now() - t0) / ms) * 100) + "%"; if (t) raf2 = requestAnimationFrame(grow); };
-    gate.addEventListener("pointerdown", (e) => { e.preventDefault(); t0 = Date.now(); t = setTimeout(() => { stop(); S.name = ($("#nm2").value || "").trim(); save(); go("parents"); }, ms); grow(); });
+    gate.addEventListener("pointerdown", (e) => { e.preventDefault(); t0 = Date.now(); t = setTimeout(() => { stop(); S.name = ($("#nm2").value || "").trim(); save(); ptab = fachOf(S.subject) ? S.subject : "de"; go("parents"); }, ms); grow(); });
     ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => gate.addEventListener(ev, stop));
   }
 
@@ -1011,7 +1044,10 @@
       case "blankwrong": startBlank(R.cat, R.q.filter((it) => R.status[it.id] === "bad").map((it) => it.id)); break;
       case "closemodal": closeModal(); break;
       case "pause": startPause(R && R.mode === "mission" ? "mission" : null); break;
-      case "pausedone": if (pauseNext === "mission" && missionStep() < 3) startRound("mission"); else go("home"); break;
+      case "pausedone":
+        if (typeof pauseNext === "function") { const fn = pauseNext; pauseNext = null; fn(); }
+        else if (pauseNext === "mission" && missionStep() < 3) startRound("mission"); else go("home");
+        break;
       case "discover": D = null; go("discover"); break;
       case "layer": D.layer = v; D.sel = null; renderDiscover(); break;
       case "badges": go("badges"); break;
@@ -1027,6 +1063,9 @@
         if (b.dataset.sure) { S = defaults(); S.askedName = true; save(); go("home"); }
         else { b.dataset.sure = "1"; b.textContent = "Wirklich alles löschen? Noch einmal tippen."; b.classList.add("danger"); }
         break;
+      case "subject": if (v === "de" || fachOf(v)) { S.subject = v; save(); go("home"); } break;
+      case "ptab": ptab = v; renderParents(); window.scrollTo(0, 0); break;
+      default: { const f = fachFor(act); if (f) f.act(act, v, b); }
     }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "nm") document.querySelector('[data-act="savename"]').click(); });
@@ -1051,7 +1090,19 @@
   addEventListener("resize", fitMap);
   window.__DE_fit = fitMap;
 
+  /* ================= Fächer ================= */
+  // Ein Fach ist eine Fabrik in window.DE_FAECHER: (core) => ({ id, prefix, name, icon, home, render, act, badges, activeOn, parents, bindParents }).
+  // Ansichten und data-act des Fachs beginnen mit seinem prefix (z. B. "m-").
+  const core = {
+    get S() { return S; }, get view() { return view; }, app, TEST,
+    save, go, $, esc, tone, say, confetti, toast, dayKey, streak, startPause, addTime, checkBadges, header, closeModal, gradeFor, sample, shuffle,
+    // Pausen-Hinweis nach 15 Minuten Übungszeit (einmal pro Sitzung)
+    pauseHint() { if (sessionMin >= (TEST.pauseAfterMin || 15) && !pauseHinted) { pauseHinted = true; return true; } return false; },
+  };
+  FAECH = (window.DE_FAECHER || []).map((make) => make(core));
+  if (S.subject !== "de" && !fachOf(S.subject)) S.subject = "de";
+
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS };
+  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; } };
   render();
 })();

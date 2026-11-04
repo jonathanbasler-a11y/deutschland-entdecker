@@ -1,7 +1,37 @@
 # Deutschland-Entdecker
 
-Lern-App fürs iPad zur LZK „Deutschland“ (Sachunterricht, 4. Klasse, Baden-Württemberg).
-Karte zum Antippen, Sterne, Punkte, Abzeichen und eine Probe-LZK mit Note.
+Lern-App fürs iPad, 4. Klasse, Baden-Württemberg. Oben wählt man das Fach:
+- **🗺️ Deutschland**: LZK „Deutschland“ (Sachunterricht). Karte zum Antippen, Sterne, Punkte, Abzeichen und eine Probe-LZK mit Note.
+- **🧮 Kopfrechnen**: großes Einmaleins mal und geteilt, mit Zehnern und Hundertern, für den Kopfrechentest auf Zeit.
+
+Name, Serie, Töne, ruhiger Modus, Vorlesen, Bewegungspause und Eltern-Übersicht gelten für beide Fächer. Punkte, Ränge und Abzeichen hat jedes Fach für sich.
+
+## Kopfrechnen
+**Rechen-Turm** mit 8 Stufen. Ein Stern auf einer Stufe öffnet die nächste:
+1. Kleines 1×1 mal (7 · 8)
+2. Kleines 1×1 geteilt (56 : 7)
+3. Nullen-Trick (36 · 10, 4200 : 100)
+4. Mit Zehnern mal (7 · 90, 70 · 9)
+5. Mit Zehnern geteilt (640 : 8, 640 : 80)
+6. Mit Hundertern (7 · 900, 6300 : 9, 6300 : 900)
+7. Zehner mal Zehner (70 · 90, 6300 : 70)
+8. Zusatz: 11er bis 19er (13 · 7, 91 : 13, 13 · 70), Ergebnisse höchstens 999
+
+Sterne: ★ 8 von 10 richtig, ★★ 80 % der letzten 20, ★★★ 90 % und im Mittel unter der Zielzeit. Sterne gehen nicht wieder verloren.
+
+- **Tagestraining**: 3 Etappen à 10 Aufgaben (Aufwärmen, neue Stufe, Tempo) mit Bewegungspause dazwischen
+- **Ziffernblock** auf dem Bildschirm (die iPad-Tastatur springt nicht auf); eine echte Tastatur geht auch
+- **Bei Fehlern**: erst ein Rechentrick als Tipp („Rechne zuerst 64 : 8, dann eine Null dran“), beim zweiten Fehler der ganze Rechenweg. Die Aufgabe kommt in derselben Runde noch einmal und danach öfter, bis sie sitzt.
+- **Belohnung**: Punkte, Serie (🔥 richtig hintereinander), Blitz-Bonus fürs schnelle Rechnen, Konfetti, Ränge und Abzeichen. Zeit wird beim Üben nur belohnt, nie bestraft.
+- **Blitzrunde**: 60 Sekunden, so viele wie möglich, mit Rekord
+- **Test-Training** wie in der Schule: *Einzeln* (vorgelesen, Zeit pro Aufgabe, auf Wunsch nur hören) oder als *Blatt* (alle Aufgaben, eine Gesamtzeit). Am Ende Note zur Orientierung und „Nur die Fehler üben“.
+- **Eltern-Übersicht → Reiter Kopfrechnen**: Sterne je Stufe, Trefferquote und Tempo, **1×1-Tabelle** (welche Grundaufgabe hakt; 640 : 80 zählt bei 8 · 8), was noch wackelt, Test-Verlauf. Dort auch einstellen: Testart, Anzahl, Zeit, Zielzeit, Rundenlänge, Zusatzstufe an/aus, alle Stufen freischalten, Test-Datum.
+
+## Neues Fach hinzufügen
+Ein Fach ist eine eigene Datei wie `public/fach-rechnen.js`, die sich bei `window.DE_FAECHER` anmeldet
+(`id`, `prefix`, `name`, `icon`, `home`, `render`, `act`, `badges`, `activeOn`, `parents`, `bindParents`).
+Ansichten und `data-act` des Fachs beginnen mit dem `prefix`. Dann die Datei in `public/index.html` vor `app.js` einbinden
+und in `public/sw.js` in die Liste `FILES` eintragen (und `CACHE` hochzählen). Der Fach-Reiter erscheint von selbst.
 
 ## Was geübt wird
 - Allgemeines: Einwohnerzahl, 16 Bundesländer, 3 Stadtstaaten, Begriff „Stadtstaat“, Flagge, Kanzler, EU, Hauptstadt
@@ -41,7 +71,9 @@ Bitte mit dem Lapbook abgleichen.
 npm install
 node tools/build-map.mjs   # Karte aus raw/ neu erzeugen (Rohdaten: Natural Earth, siehe unten)
 node tools/test-logic.mjs        # Tests der Auswertung
+node tools/test-rechnen.mjs      # Tests der Rechen-Logik (Aufgaben, Rechentricks, Sterne)
 node tools/e2e.mjs               # Browser-Test, spielt alle Modi durch (braucht Playwright)
+node tools/e2e-rechnen.mjs       # Kopfrechnen: Turm, Fehler, Tagestraining, Blitz, Test, Eltern, iPad-Größen
 node tools/e2e-flows.mjs         # Probe-LZK, Schwächen-Modus, Einstellungen, Speicher, Serie, Countdown
 node tools/e2e-features.mjs      # Tagesmission, Bewegungspause, stumme Karte, Eltern-Übersicht
 node tools/e2e-devices.mjs       # iPad-Größen quer/hoch, Fingertipps, Tastatur, kleine Ziele

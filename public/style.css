@@ -298,3 +298,109 @@ body.calm .mapwrap.shake { animation: none; }
 .gate .glabel { position: relative; }
 @media (max-width: 700px) { .barrow { grid-template-columns: 1fr auto; } .barrow .bar { grid-column: 1 / -1; grid-row: 2; } .tbl { font-size: .85rem; } }
 .mission .mode.big { width: 100%; }
+
+/* ================= Fach-Reiter ================= */
+.subjects { display: flex; gap: 10px; margin: -4px 0 14px; flex-wrap: wrap; }
+.subj { flex: 1 1 0; max-width: 300px; min-width: 150px; background: var(--panel); border: 3px solid var(--line); border-radius: 16px; padding: 8px 14px; font-weight: 800; font-size: 1.1rem; min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.subj .ico { font-size: 1.4rem; line-height: 1; }
+.subj[aria-pressed="true"] { background: var(--sun); color: var(--sun-ink); border-color: #c99200; }
+.bgroup { font-size: 1.1rem; color: var(--muted); margin: 4px 0 -4px; }
+.ptabs { max-width: 520px; }
+
+/* ================= Kopfrechnen: Startseite ================= */
+.ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rung { width: 100%; display: flex; align-items: center; gap: 12px; background: var(--panel2); border-radius: 16px; padding: 10px 12px; text-align: left; border: 3px solid transparent; min-height: 60px; position: relative; }
+.rung .rn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--line); font-weight: 800; flex: none; }
+.rung .rt { flex: 1; min-width: 0; }
+.rung .rt b { display: block; line-height: 1.2; }
+.rung .rt small { color: var(--muted); }
+.rung .rs { color: var(--sun); font-size: 1.15rem; letter-spacing: 1px; white-space: nowrap; }
+.rung.cur { border-color: var(--sun); background: #25547d; }
+.rung.cur .rn { background: var(--sun); color: var(--sun-ink); }
+.rung.top .rn { background: var(--ok); color: #05301f; }
+.rung[disabled] { opacity: .45; cursor: default; }
+.rung .here { position: absolute; right: 12px; top: -11px; background: var(--sun); color: var(--sun-ink); font-size: .72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+.tag { font-style: normal; font-size: .7rem; font-weight: 800; background: #a98bff; color: #1d0f45; padding: 1px 6px; border-radius: 6px; vertical-align: 2px; }
+.modal .mode.pick { box-shadow: 0 0 0 3px var(--sun); }
+
+/* ================= Kopfrechnen: Aufgabe ================= */
+.mstage { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: 18px; align-content: center; width: 100%; max-width: 1100px; margin: 0 auto; min-height: 0; }
+.mcard { background: var(--panel); border-radius: 26px; padding: 22px; display: flex; flex-direction: column; justify-content: center; gap: 14px; border: 3px solid transparent; min-width: 0; }
+.mcard.good { border-color: var(--ok); }
+.mcard.badc { border-color: var(--bad); }
+.mcard.shake { animation: shake .35s; }
+.mlabel { color: var(--muted); font-weight: 700; text-transform: uppercase; font-size: .78rem; letter-spacing: .04em; }
+.mtask { display: flex; align-items: center; justify-content: center; gap: .3em; flex-wrap: wrap; font-size: clamp(2.4rem, 6.4vw, 4.6rem); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; min-height: 1.4em; }
+.mq { white-space: nowrap; }
+.mq.listen { font-size: .5em; color: var(--sun); }
+.mans { min-width: 2.6em; padding: 0 .25em; border-radius: 18px; background: #fff; color: #10253a; text-align: center; border: 4px solid var(--line); min-height: 1.3em; line-height: 1.2; }
+.mans.empty::after { content: ""; display: inline-block; width: 4px; height: .9em; background: var(--sun); vertical-align: -.1em; animation: blink 1s steps(1) infinite; }
+.mans.ok, .mans.sol { border-color: var(--ok); background: #e5fbf1; color: #0c5a3a; }
+.mans.bad { border-color: var(--bad); background: #ffeaea; }
+@keyframes blink { 50% { opacity: 0; } }
+.tbar { height: 12px; background: var(--panel2); border-radius: 8px; overflow: hidden; }
+.tbar i { display: block; height: 100%; width: 100%; background: var(--sun); }
+.tbar[hidden] { display: none; }
+.mtools { display: flex; gap: 8px; justify-content: center; }
+.mtools:empty { display: none; }
+.mfb:empty { display: none; }
+.mfb .feedback { font-size: 1.1rem; text-align: center; }
+.gbar .combo { font-weight: 800; color: #ff9a5c; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gbar .combo:empty { display: none; }
+.gbar .combo.hot { animation: pop .5s ease-in-out infinite alternate; }
+@keyframes pop { to { transform: scale(1.18); } }
+body.calm .gbar .combo.hot, body.calm .mans.empty::after { animation: none; }
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.key { background: var(--panel2); border-radius: 18px; min-height: clamp(58px, 11vh, 92px); font-size: 2rem; font-weight: 800; border-bottom: 5px solid var(--line); font-variant-numeric: tabular-nums; }
+.key:active { transform: translateY(2px); border-bottom-width: 3px; }
+.key.ok { background: var(--sun); color: var(--sun-ink); border-bottom-color: #c99200; font-size: 1.6rem; }
+.key.del { font-size: 1.6rem; }
+
+/* ================= Kopfrechnen: Blatt ================= */
+.btn.hand { min-height: 48px; padding: 8px 16px; font-size: 1rem; }
+.msheet { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 16px; align-items: start; align-content: start; }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.scell { background: var(--panel); border-radius: 14px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; min-height: 56px; border: 3px solid transparent; font-size: 1.2rem; font-weight: 700; text-align: left; font-variant-numeric: tabular-nums; }
+.scell .sn { color: var(--muted); font-size: .8rem; min-width: 1.5em; }
+.scell .sq { flex: 1; white-space: nowrap; }
+.scell .sa { min-width: 3.4em; min-height: 1.7em; background: #fff; color: #10253a; border-radius: 10px; padding: 3px 8px; text-align: right; }
+.scell.sel { border-color: var(--sun); background: #25547d; }
+.sgrid.done { margin-top: 14px; text-align: left; }
+.sgrid.done .scell.ok { border-color: var(--ok); }
+.sgrid.done .scell.bad { border-color: var(--bad); }
+.sgrid.done .scell.bad .sa { color: #0c5a3a; }
+.sgrid.done s { color: #a11d1d; }
+.spad { position: sticky; top: 12px; }
+
+/* ================= Kopfrechnen: Ergebnis, Eltern ================= */
+.gains { margin-top: 12px; display: grid; gap: 6px; background: var(--panel2); border-radius: 14px; padding: 12px; font-weight: 700; }
+.mresults .listcols li { font-variant-numeric: tabular-nums; }
+.x1wrap { overflow-x: auto; }
+.x1 { border-collapse: separate; border-spacing: 3px; font-variant-numeric: tabular-nums; margin: 0 auto; }
+.x1 th { color: var(--muted); font-size: .85rem; padding: 4px; }
+.x1 td { min-width: 44px; height: 38px; text-align: center; border-radius: 8px; font-weight: 700; font-size: .9rem; }
+.x1 td.na, .legend .lg.na { background: var(--panel2); color: var(--muted); }
+.x1 td.good, .legend .lg.good { background: #14664a; }
+.x1 td.slow, .legend .lg.slow { background: #8a6a12; }
+.x1 td.bad, .legend .lg.bad { background: #7a2a2a; }
+
+@media (max-aspect-ratio: 1/1) {
+  .mhome .right { order: -1; }
+  .mstage { grid-template-columns: minmax(0, 1fr); align-content: start; }
+  .mstage .numpad { width: min(100%, 520px); margin: 0 auto; }
+  .msheet { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; align-content: stretch; }
+  .spad { align-self: end; position: sticky; top: auto; bottom: 0; background: var(--ink); padding: 8px 0 max(6px, env(safe-area-inset-bottom)); }
+  .spad .numpad { width: min(100%, 520px); margin: 0 auto; gap: 6px; }
+  .spad .key { min-height: 52px; }
+}
+@media (max-width: 500px) {
+  .mstage { gap: 12px; }
+  .mcard { padding: 14px; gap: 10px; }
+  .mfb .feedback { font-size: 1rem; padding: 10px 12px; }
+  .key { min-height: clamp(52px, 8.5vh, 76px); font-size: 1.7rem; }
+  .subj { min-width: 0; font-size: 1rem; }
+  .sgrid { grid-template-columns: 1fr 1fr; }
+  .scell { font-size: 1rem; padding: 6px 8px; }
+  .scell .sn { display: none; }
+  .x1 td { min-width: 30px; font-size: .75rem; }
+}

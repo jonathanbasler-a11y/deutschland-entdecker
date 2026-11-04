@@ -21,6 +21,8 @@ jobs:
           node-version: 22
       - name: Logik
         run: node tools/test-logic.mjs
+      - name: Rechen-Logik
+        run: node tools/test-rechnen.mjs
       - name: Browser installieren
         run: |
           npm install --no-save playwright@1.63.0
@@ -31,6 +33,8 @@ jobs:
         run: node tools/e2e-flows.mjs
       - name: Tagesmission, stumme Karte, Eltern-Übersicht
         run: node tools/e2e-features.mjs
+      - name: Kopfrechnen
+        run: node tools/e2e-rechnen.mjs
       - name: iPad-Größen
         run: node tools/e2e-devices.mjs chromium
       - name: Offline
