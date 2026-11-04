@@ -25,9 +25,13 @@ Bitte mit dem Lapbook abgleichen.
 ```
 npm install
 node tools/build-map.mjs   # Karte aus raw/ neu erzeugen (Rohdaten: Natural Earth, siehe unten)
-node tools/test-logic.mjs  # Tests der Auswertung
-node tools/e2e.mjs         # Browser-Test, spielt alle Modi durch (braucht Playwright)
+node tools/test-logic.mjs        # Tests der Auswertung
+node tools/e2e.mjs               # Browser-Test, spielt alle Modi durch (braucht Playwright)
+node tools/e2e-flows.mjs         # Probe-LZK, Schwächen-Modus, Einstellungen, Speicher, Serie, Countdown
+node tools/e2e-devices.mjs       # iPad-Größen quer/hoch, Fingertipps, Tastatur, kleine Ziele
+node tools/test-offline.mjs      # funktioniert ohne Internet
 ```
+Alle Tests laufen auch bei GitHub, bei jedem Pull Request und vor jeder Veröffentlichung.
 `public/` ist die fertige App. Der Workflow `.github/workflows/pages.yml` veröffentlicht sie über GitHub Pages.
 
 ## Kartendaten

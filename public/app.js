@@ -147,9 +147,12 @@
     s += `<g>` + rivers.map((w) => `<path class="river" d="${w.d}"/>`).join("") + `</g>`;
     s += M.water.filter((w) => w.kind === "See").map((w) => `<path class="lake" d="${w.d}"/>`).join("");
     s += `<g>` + rivers.map((w) => `<path class="hit" data-id="w_${w.id}" d="${w.d}"/>`).join("") + M.water.filter((w) => w.kind === "See").map((w) => `<path class="hit lakehit" data-id="w_${w.id}" d="${w.d}"/>`).join("") + `</g>`;
+    // Kinderfinger: kleine Ziele bekommen einen unsichtbaren Trefferkreis
+    s += `<g>` + Object.entries(BIG_HIT).map(([id, r]) => { const it = BY_ID[id]; return `<circle class="hit dot" data-id="${id}" cx="${it.label[0]}" cy="${it.label[1]}" r="${r}"/>`; }).join("") + `</g>`;
     s += `<g id="hlO"></g><g id="lab"></g></svg>`;
     return s;
   }
+  const BIG_HIT = { s_hb: 30, s_hh: 28, s_be: 28 };
   const idsOf = (cat) => new Set(catItems(cat).map((i) => i.id));
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -346,7 +349,7 @@
   }
 
   function blitzTimer() {
-    const tok = R.tok, end = Date.now() + 60000;
+    const tok = R.tok, end = Date.now() + ((window.__DE_TEST && window.__DE_TEST.blitzMs) || 60000);
     const tick = () => {
       if (!R || R.tok !== tok) return;
       const left = end - Date.now();
@@ -368,10 +371,12 @@
   function showQuestion() {
     if (R.i >= R.q.length) return finish();
     const q = R.q[R.i];
-    R.cur = q; R.lock = false; R.attempt = 0; R.onMap = null; R.onPanel = null;
+    R.cur = q; R.lock = false; R.waitNext = false; R.attempt = 0; R.onMap = null; R.onPanel = null;
     updateBar();
     const gen = q.it.cat === "general";
     $("#stage").classList.toggle("general", gen);
+    $("#stage").classList.toggle("writing", q.skill === "write" && !gen);
+    fitMap();
     if (!gen) { clearHL(); $(".map").classList.remove("show-mtn"); }
     if (gen) return q.skill === "write" ? renderGenWrite(q) : q.it.g.flag ? renderFlag(q) : renderGenChoice(q);
     if (q.skill === "tap") return renderTap(q);
@@ -394,7 +399,7 @@
   const next = () => { if (!R) return; R.i++; showQuestion(); };
   const later = (fn, ms) => { const tok = R.tok; setTimeout(() => R && R.tok === tok && fn(), ms); };
   const fb = (cls, html) => { const f = $("#fb"); if (f) f.innerHTML = html ? `<div class="feedback ${cls}" role="status">${html}</div>` : ""; };
-  const weiter = (label = "Weiter") => { $("#act").innerHTML = `<button class="btn" data-a="next" id="nx">${label}</button>`; R.onPanel = (b) => { if (b.dataset.a === "next") next(); }; const b = $("#nx"); b && b.focus({ preventScroll: true }); };
+  const weiter = (label = "Weiter") => { $("#act").innerHTML = `<button class="btn" data-a="next" id="nx">${label}</button>`; R.onPanel = (b) => { if (b.dataset.a === "next") next(); }; const b = $("#nx"); if (b && document.activeElement !== $("#wi")) b.focus({ preventScroll: true }); };
   const speakBtn = (t) => `<button class="speak" data-a="say" data-t="${esc(t)}" aria-label="Vorlesen">🔊</button>`;
   const sayHandler = (b) => { if (b.dataset.a === "say") { say(b.dataset.t); return true; } };
   const praise = ["Richtig!", "Super!", "Genau!", "Stark!", "Top!"];
@@ -456,11 +461,20 @@
   }
 
   // --- Schreiben (Karte) ---
-  function writeForm(prompt, hint, hl) {
-    $("#panel").innerHTML = `<div class="prompt"><small>Schreiben</small><h2>${prompt}</h2></div>
+  function writeForm(prompt, hint) {
+    const old = $("#wi");
+    if (old && $("#wf")) {
+      // gleiches Feld weiterverwenden: auf dem iPad bleibt so die Tastatur offen
+      $("#wprompt").innerHTML = prompt;
+      old.value = ""; old.className = ""; old.placeholder = hint;
+      old.setAttribute("inputmode", "text"); old.setAttribute("autocapitalize", "words");
+      const ws = $("#ws"); ws.textContent = "Prüfen"; ws.classList.remove("next"); fb(); $("#act").innerHTML = "";
+      return old;
+    }
+    $("#panel").innerHTML = `<div class="prompt"><small>Schreiben</small><h2 id="wprompt">${prompt}</h2></div>
       <form class="write" id="wf" autocomplete="off"><input id="wi" type="text" inputmode="text" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Antwort" placeholder="${hint}"><button class="btn" type="submit" id="ws">Prüfen</button></form><div id="fb"></div><div id="act"></div>`;
     const inp = $("#wi");
-    setTimeout(() => { try { inp.focus(); inp.scrollIntoView({ block: "center" }); } catch (e) { /* */ } }, 60);
+    setTimeout(() => { try { inp.focus({ preventScroll: true }); } catch (e) { /* */ } }, 60);
     return inp;
   }
   function wrongTip(it, kind) {
@@ -473,7 +487,7 @@
     const inp = writeForm(CATS[it.cat].ask + " Schreibe den Namen.", "Name eintippen");
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
-      if (R.lock) return;
+      if (R.lock) { if (R.waitNext) next(); return; }
       const j = judge(inp.value, nameList(it));
       if (j.kind === "empty") return inp.focus();
       finishWrite(q, j, inp, it.name, () => { clearHL(); highlight(it, "ok"); labels([it]); }, wrongTip(it, j.kind));
@@ -482,7 +496,7 @@
   // gemeinsame Auswertung für Schreib-Aufgaben
   function finishWrite(q, j, inp, correct, reveal, tip) {
     if (j.ok) {
-      R.lock = true; inp.classList.add("ok"); inp.disabled = true; $("#ws").disabled = true;
+      R.lock = true; inp.classList.add("ok");
       reveal();
       const note = j.kind === "spelling" ? `<small>So schreibt man es richtig: ${esc(correct)}</small>` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(correct)}</small>` : "";
       fb("ok", pr() + note);
@@ -493,11 +507,12 @@
     inp.classList.add("bad");
     setTimeout(() => inp.classList.remove("bad"), 600);
     if (probe() || R.attempt >= 2) {
-      R.lock = true; inp.disabled = true; $("#ws").disabled = true;
+      R.lock = true; R.waitNext = true;
+      const ws = $("#ws"); ws.textContent = "Weiter"; ws.classList.add("next");
       reveal();
       fb("bad", `Richtig ist: ${esc(correct)}${j.kind === "close" ? "<small>Das war knapp daneben.</small>" : ""}`);
       commit(q, "fail");
-      return weiter();
+      return;
     }
     tone("bad");
     fb("hint", tip);
@@ -527,7 +542,7 @@
     if (w.num) inp.setAttribute("inputmode", "numeric");
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
-      if (R.lock) return;
+      if (R.lock) { if (R.waitNext) next(); return; }
       const j = w.num ? judgeNumber(inp.value, w.num, w.show) : judge(inp.value, w.answers);
       if (j.kind === "empty") return inp.focus();
       finishWrite(q, j, inp, w.show, () => {}, j.kind === "close" ? "Fast! Schau noch einmal genau auf die Buchstaben." : "Nicht ganz. Überlege noch einmal.");
@@ -566,6 +581,7 @@
   function finish() {
     if (!R) return;
     const r = R, ok = r.results.filter((x) => x.ok).length, n = r.results.length;
+    r.tok = -1; // ausstehende Zeitgeber (Weiter nach Treffer) dürfen nichts mehr tun
     r.ok = ok; r.n = n;
     r.pct = n ? Math.round((ok / n) * 100) : 0;
     if (r.mode === "probe") {
@@ -642,6 +658,26 @@
     }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "nm") document.querySelector('[data-act="savename"]').click(); });
+
+  // Beim Schreiben passt die Karte in den Bereich über der Bildschirmtastatur.
+  // Sichtbare Höhe kommt aus visualViewport (Tests können --vvh setzen).
+  const vv = window.visualViewport;
+  function visibleHeight() {
+    const forced = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--vvh"));
+    return forced || (vv ? vv.height : innerHeight);
+  }
+  function fitMap() {
+    const mw = $(".stage .mapwrap");
+    if (!mw) return;
+    if (!$(".stage.writing")) { mw.style.height = ""; mw.style.width = ""; return; }
+    const top = mw.getBoundingClientRect().top + window.scrollY;
+    const hgt = Math.max(200, Math.floor(visibleHeight() - top - 12));
+    mw.style.height = hgt + "px";
+    mw.style.width = "auto";
+  }
+  if (vv) vv.addEventListener("resize", () => { if ($(".stage.writing")) { window.scrollTo(0, 0); fitMap(); } });
+  addEventListener("resize", fitMap);
+  window.__DE_fit = fitMap;
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.__DE = { get S() { return S; }, ITEMS };
