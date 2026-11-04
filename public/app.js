@@ -1,6 +1,6 @@
 "use strict";
 (function () {
-  const { judge, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
+  const { judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
   const TEST = window.__DE_TEST || {};
@@ -75,11 +75,11 @@
     { id: "mission1", icon: "🎯", name: "Mission erfüllt", desc: "Die erste Tagesmission geschafft", ok: () => S.missionsDone >= 1 },
     { id: "mission3", icon: "🏅", name: "Dranbleiber", desc: "3 Tagesmissionen geschafft", ok: () => S.missionsDone >= 3 },
     { id: "stumm", icon: "🗺️", name: "Kartenzeichner", desc: "Eine stumme Karte ganz ohne Fehler", ok: () => !!S.blankPerfect },
-    { id: "laender", icon: "🏙️", name: "Länder-Kenner", desc: "Alle 16 Bundesländer mit 3 Sternen", ok: () => full("states") },
-    { id: "nachbarn", icon: "🧭", name: "Nachbarn-Profi", desc: "Alle 9 Nachbarländer mit 3 Sternen", ok: () => full("neighbors") },
-    { id: "fluss", icon: "🌊", name: "Flussprofi", desc: "Rhein, Donau, Elbe, Weser und Neckar mit 3 Sternen", ok: () => ["rhein", "donau", "elbe", "weser", "neckar"].every((k) => stars(BY_ID["w_" + k]) === 3) },
-    { id: "wasser", icon: "⚓", name: "Wassermeister", desc: "Alle 8 Gewässer mit 3 Sternen", ok: () => full("water") },
-    { id: "gipfel", icon: "⛰️", name: "Gipfelstürmer", desc: "Alle 7 Gebirge mit 3 Sternen", ok: () => full("mountains") },
+    { id: "laender", icon: "🏙️", name: "Länder-Kenner", desc: `Alle ${catItems("states").length} Bundesländer mit 3 Sternen`, ok: () => full("states") },
+    { id: "nachbarn", icon: "🧭", name: "Nachbarn-Profi", desc: `Alle ${catItems("neighbors").length} Nachbarländer mit 3 Sternen`, ok: () => full("neighbors") },
+    { id: "fluss", icon: "🌊", name: "Flussprofi", desc: "Alle Flüsse mit 3 Sternen", ok: () => catItems("water").filter((i) => i.kind === "Fluss").every((i) => stars(i) === 3) },
+    { id: "wasser", icon: "⚓", name: "Wassermeister", desc: `Alle ${catItems("water").length} Flüsse, Seen und Meere mit 3 Sternen`, ok: () => full("water") },
+    { id: "gipfel", icon: "⛰️", name: "Gipfelstürmer", desc: `Alle ${catItems("mountains").length} Gebirge und Berge mit 3 Sternen`, ok: () => full("mountains") },
     { id: "allg", icon: "💡", name: "Allgemeinwissen", desc: "Alle Fragen zu Allgemeines gemeistert", ok: () => full("general") },
     { id: "serie3", icon: "🔥", name: "3 Tage in Folge", desc: "Drei Tage hintereinander geübt", ok: () => streak() >= 3 },
     { id: "serie5", icon: "🌟", name: "5 Tage in Folge", desc: "Fünf Tage hintereinander geübt", ok: () => streak() >= 5 },
@@ -162,7 +162,7 @@
   const applyCalm = () => document.body.classList.toggle("calm", !!S.calm);
 
   /* ================= Karte ================= */
-  const BIG_HIT = { s_hb: 30, s_hh: 28, s_be: 28 };
+  const BIG_HIT = { s_hb: 30, s_hh: 28, s_be: 28, w_chiemsee: 24, w_starnberg: 22, w_mueritz: 24, m_zugspitze: 28 };
   function mapMarkup() {
     const M = MAP;
     let s = `<svg class="map" viewBox="0 0 ${M.W} ${M.H}" role="img" aria-label="Karte von Deutschland"><rect class="sea" width="${M.W}" height="${M.H}"/>`;
@@ -181,6 +181,9 @@
     return s;
   }
   const idsOf = (cat) => new Set(catItems(cat).map((i) => i.id));
+  const askOf = (it) => it.ask || CATS[it.cat].ask;
+  // Namen der anderen Begriffe derselben Art: ein Tippfehler darf keinem anderen Begriff näher sein
+  const othersOf = (it) => catItems(it.cat).filter((x) => x.id !== it.id).flatMap((x) => [x.name].concat(x.alts));
 
   // Welches Ding wurde getippt? Nicht gesuchte Flächen (Gebirge, Flüsse) sind durchlässig.
   function pick(evt, cand) {
@@ -205,9 +208,11 @@
   // Fokus: alles außer dem markierten Gebiet abdunkeln
   const focusMap = (on) => { const m = $(".stage .map"); if (m) m.classList.toggle("focus", !!on); };
   const labelCls = { states: "", neighbors: "t-nb", water: "t-water", mountains: "t-mtn" };
+  // Position der Beschriftung (manche kleinen Seen liegen dicht beieinander)
+  const textAt = (it) => { const d = LABEL_SHIFT[it.id] || [0, 0]; return [it.label[0] + d[0], it.label[1] + d[1]]; };
   function labels(items) {
     const l = $("#lab");
-    l.innerHTML = items.map((it) => `<text class="${labelCls[it.cat]}" x="${it.label[0]}" y="${it.label[1]}" ${it.small ? 'style="font-size:15px"' : ""}>${esc(it.name)}</text>`).join("");
+    l.innerHTML = items.map((it) => { const [x, y] = textAt(it); return `<text class="${labelCls[it.cat]}" x="${x}" y="${y}" ${it.small ? 'style="font-size:15px"' : ""}>${esc(it.name)}</text>`; }).join("");
   }
 
   const blend = (a, b, t) => {
@@ -382,7 +387,7 @@
       const it = BY_ID[r.id];
       D.sel = it.id;
       clearHL(); apply(); highlight(it);
-      const kind = it.cat === "water" ? it.kind : it.cat === "states" ? "Bundesland" : it.cat === "neighbors" ? "Nachbarland" : "Gebirge";
+      const kind = it.kind || (it.cat === "states" ? "Bundesland" : it.cat === "neighbors" ? "Nachbarland" : "Gebirge");
       $("#info").innerHTML = `<div class="kind">${kind}</div><h2>${esc(it.name)}</h2><p>${esc(it.info)}</p><button class="speak" data-act="say" data-v="${esc(it.name)}. ${esc(it.info)}" style="margin-top:10px">🔊 Vorlesen</button>`;
       if (S.speak || S.autoRead) say(it.name);
       tone("ok");
@@ -399,7 +404,8 @@
   const nameList = (it) => [it.name].concat(it.alts);
   // Schreibfallen aus dem Lapbook kommen beim Schreiben öfter dran, bis sie sicher sitzen
   const trap = (it, skill) => !!LAPBOOK_SPELLING[it.id] && it.skills.includes("write") && (skill === "write" || !skill) && lvl(it.id, "write") < 2;
-  const weightFor = (skill) => (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0) + (trap(it, skill) ? 3 : 0);
+  const focus = (it) => FOCUS.includes(it.id) && stars(it) < it.skills.length;
+  const weightFor = (skill) => (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0) + (trap(it, skill) ? 3 : 0) + (focus(it) ? 8 : 0);
   const weight = weightFor(null);
   const roundLen = () => [5, 8, 12].includes(+S.roundLen) ? +S.roundLen : 8;
   function poolFor(topic, skill) {
@@ -562,8 +568,8 @@
     const it = q.it;
     highlight(it);
     const opts = shuffle([it, ...distractors(it)]);
-    $("#panel").innerHTML = `<div class="prompt"><small>Auswählen</small><h2>${CATS[it.cat].ask}</h2></div><div class="opts">${opts.map((o) => `<button class="opt" data-a="opt" data-id="${o.id}">${esc(o.name)}</button>`).join("")}</div><div id="fb"></div><div id="act"></div>`;
-    readAloud(CATS[it.cat].ask);
+    $("#panel").innerHTML = `<div class="prompt"><small>Auswählen</small><h2>${askOf(it)}</h2></div><div class="opts">${opts.map((o) => `<button class="opt" data-a="opt" data-id="${o.id}">${esc(o.name)}</button>`).join("")}</div><div id="fb"></div><div id="act"></div>`;
+    readAloud(askOf(it));
     R.onPanel = (b) => {
       if (b.dataset.a !== "opt" || R.lock) return;
       R.lock = true;
@@ -600,12 +606,12 @@
   function renderWrite(q) {
     const it = q.it;
     highlight(it);
-    const inp = writeForm(CATS[it.cat].ask + " Schreibe den Namen.", "Name eintippen");
-    readAloud(CATS[it.cat].ask);
+    const inp = writeForm(askOf(it) + " Schreibe den Namen.", "Name eintippen");
+    readAloud(askOf(it));
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
       if (R.lock) { if (R.waitNext) next(); return; }
-      const j = judge(inp.value, nameList(it));
+      const j = judge(inp.value, nameList(it), othersOf(it));
       if (j.kind === "empty") return inp.focus();
       finishWrite(q, j, inp, it.name, () => { clearHL(); highlight(it, "ok"); labels([it]); }, wrongTip(it, j.kind));
     };
@@ -624,10 +630,10 @@
     if (j.ok) {
       R.lock = true; inp.classList.add("ok");
       reveal();
-      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig:</small>${diffHtml(inp.value, j.canonical || target)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical || correct)}</small>` : "";
-      fb("ok", pr() + note);
+      const note = j.kind === "spelling" || j.kind === "typo" ? `<small>Kleiner Schreibtipp, so schreibt man es:</small>${diffHtml(inp.value, j.canonical || target)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical || correct)}</small>` : "";
+      fb("ok", pr() + (note ? " 👍" : "") + note);
       commit(q, R.attempt === 0 ? "first" : "second");
-      return later(next, note ? 1800 : 1000);
+      return later(next, note ? 2200 : 1000);
     }
     R.attempt++;
     inp.classList.add("bad");
@@ -636,7 +642,7 @@
       R.lock = true; R.waitNext = true;
       const ws = $("#ws"); ws.textContent = "Weiter"; ws.classList.add("next");
       reveal();
-      fb("bad", `Richtig ist: ${esc(correct)}${j.kind === "close" ? "<small>Das war knapp daneben.</small>" : ""}${target ? diffHtml(inp.value, target) : ""}`);
+      fb("bad", `Richtig ist: ${esc(correct)}${target ? diffHtml(inp.value, target) : ""}`);
       commit(q, "fail");
       return;
     }
@@ -671,9 +677,10 @@
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
       if (R.lock) { if (R.waitNext) next(); return; }
-      const j = w.num ? judgeNumber(inp.value, w.num, w.show) : judge(inp.value, w.answers);
+      const j = w.num ? judgeNumber(inp.value, w.num, w.show) : w.all ? judgeAll(inp.value, w.all) : judge(inp.value, w.answers);
       if (j.kind === "empty") return inp.focus();
-      finishWrite(q, j, inp, w.show, () => {}, j.kind === "close" ? "Fast! Schau noch einmal genau auf die Buchstaben." : "Nicht ganz. Überlege noch einmal.", w.num ? null : closest(inp.value, w.answers));
+      const tip = j.kind === "partial" ? `Gut, ${esc(j.found.join(" und "))} stimmt! Es fehlt noch ${j.missing.length === 1 ? "eins" : j.missing.length}.` : "Nicht ganz. Überlege noch einmal.";
+      finishWrite(q, j, inp, w.show, () => {}, tip, w.num ? null : w.all ? (j.ok ? j.canonical : null) : closest(inp.value, w.answers));
     };
   }
 
@@ -770,7 +777,7 @@
       const n = R.nums[it.id], st = R.status[it.id], cur = it.id === R.cur && !blankDone(it.id);
       const [x, y] = it.label;
       let s = `<g class="num ${cur ? "cur" : st || "open"}" data-num="${it.id}"><circle cx="${x}" cy="${y}" r="${cur ? 21 : 16}"/><text x="${x}" y="${y + 6}">${n}</text></g>`;
-      if (st === "ok" || st === "bad" || st === "known") s += `<text class="numlab ${st}" x="${x}" y="${y + 36}">${esc(it.name)}</text>`;
+      if (st === "ok" || st === "bad" || st === "known") { const [tx, ty] = textAt(it); s += `<text class="numlab ${st}" x="${tx}" y="${(LABEL_SHIFT[it.id] ? ty : y) + 36}">${esc(it.name)}</text>`; }
       return s;
     }).join("");
     $("#bgrid").innerHTML = R.all.map((it) => `<button class="nb-cell ${it.id === R.cur && !blankDone(it.id) ? "cur" : R.status[it.id] || "open"}" data-a="jump" data-id="${it.id}" ${blankDone(it.id) ? "disabled" : ""}>${R.nums[it.id]}</button>`).join("");
@@ -799,10 +806,10 @@
     R.lock = true;
     R.status[it.id] = "ok";
     clearHL(); highlight(it, "ok");
-    fb("ok", pr() + (kindNote || ""));
+    fb("ok", pr() + (kindNote ? " 👍" + kindNote : ""));
     commit({ it, skill }, R.attempt === 0 ? "first" : "second");
     drawNums();
-    later(blankNext, kindNote ? 1500 : 800);
+    later(blankNext, kindNote ? 2200 : 800);
   }
   function blankFailed(it, skill, typed) {
     R.lock = true; R.waitNext = true;
@@ -818,11 +825,11 @@
     e.preventDefault();
     if (R.lock) { if (R.waitNext) blankNext(); return; }
     const it = BY_ID[R.cur], inp = $("#bi");
-    const j = judge(inp.value, nameList(it));
+    const j = judge(inp.value, nameList(it), othersOf(it));
     if (j.kind === "empty") return inp.focus();
     if (j.ok) {
       inp.classList.add("ok");
-      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig:</small>${diffHtml(inp.value, j.canonical)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical)}</small>` : "";
+      const note = j.kind === "spelling" || j.kind === "typo" ? `<small>Kleiner Schreibtipp, so schreibt man es:</small>${diffHtml(inp.value, j.canonical)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical)}</small>` : "";
       return blankSolved(it, "write", note);
     }
     R.attempt++;
@@ -940,7 +947,8 @@
       const g = svg.querySelector("#nums");
       g.innerHTML = r.all.map((it) => {
         const st = r.status[it.id] || "open", [x, y] = it.label;
-        return `<g class="num ${st}"><circle cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y + 6}">${r.nums[it.id]}</text></g><text class="numlab ${st}" x="${x}" y="${y + 36}">${esc(it.name)}</text>`;
+        const [tx, ty] = textAt(it);
+        return `<g class="num ${st}"><circle cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y + 6}">${r.nums[it.id]}</text></g><text class="numlab ${st}" x="${tx}" y="${(LABEL_SHIFT[it.id] ? ty : y) + 36}">${esc(it.name)}</text>`;
       }).join("");
     }
   }

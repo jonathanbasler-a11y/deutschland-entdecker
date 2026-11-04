@@ -101,7 +101,7 @@ await p.click('[data-act="quit"]');
 // Schreiben exakt: erzwinge bekannte Frage über Thema mountains
 await p.click('[data-act="topic"][data-v="mountains"]');
 await p.click('[data-act="mode"][data-v="write"]');
-for (let i = 0; i < 7; i++) {
+for (let i = 0; i < 14; i++) {
   const nm = await p.evaluate(() => {
     const id = document.querySelector(".hl-poly") && [...document.querySelectorAll(".hl-poly")].length;
     return null;
@@ -152,7 +152,7 @@ await p.click('[data-act="mode"][data-v="write"]');
 for (let i = 0; i < 12; i++) {
   if (await p.$(".results")) break;
   const q = await p.textContent(".prompt h2");
-  const sol = await p.evaluate((q) => { const w = window.__DE.ITEMS.find((i) => i.g && i.g.write && i.g.write.q === q).g.write; return w.num ? String(w.num[w.num.length > 1 ? 1 : 0]) : w.answers[0]; }, q);
+  const sol = await p.evaluate((q) => { const w = window.__DE.ITEMS.find((i) => i.g && i.g.write && i.g.write.q === q).g.write; return w.num ? String(w.num[w.num.length > 1 ? 1 : 0]) : w.all ? w.all.join(" und ") : w.answers[0]; }, q);
   await p.fill("#wi", sol);
   await p.click("#ws");
   await p.waitForSelector(".feedback.ok", { timeout: 1500 }).catch(() => { fails++; console.log("FAIL gen write", q, sol); });

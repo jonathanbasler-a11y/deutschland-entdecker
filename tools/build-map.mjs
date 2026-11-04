@@ -109,7 +109,7 @@ for (const f of countries.features) {
 if (neighbors.length !== 9) throw new Error("expected 9 neighbours, got " + neighbors.length);
 
 // ---------- Water ----------
-const rivers = raw("rivers.geojson"), riversEu = raw("rivers_eu.geojson"), lakes = raw("lakes.geojson");
+const rivers = raw("rivers.geojson"), riversEu = raw("rivers_eu.geojson"), lakes = raw("lakes.geojson"), lakesEu = raw("lakes_eu.geojson");
 function riverPath(features, { minLat = -90, extra = [] } = {}) {
   const lines = [];
   for (const f of features) {
@@ -134,10 +134,16 @@ const water = [
   { id: "elbe", name: "Elbe", kind: "Fluss", d: riverPath(pick(rivers, /^Elbe$/), { extra: [[[10.0, 53.53], [9.95, 53.545], [9.7, 53.56], [9.48, 53.66], [9.25, 53.83], [9.0, 53.9], [8.75, 53.88], [8.55, 53.95]]] }), label: xy([11.95, 52.55]) },
   { id: "weser", name: "Weser", kind: "Fluss", d: riverPath(pick(rivers, /^Weser$/), { minLat: 51.415, extra: [[[8.8, 53.08], [8.65, 53.17], [8.5, 53.3], [8.52, 53.45], [8.57, 53.55], [8.48, 53.7]]] }), label: xy([9.0, 52.3]) },
   { id: "neckar", name: "Neckar", kind: "Fluss", d: riverPath(pick(riversEu, /^Neckar$/)), label: xy([9.55, 48.95]) },
+  { id: "main", name: "Main", kind: "Fluss", d: riverPath(pick(rivers, /^Main$/)), label: xy([10.45, 50.12]) },
 ];
 for (const w of water) if (!w.d) throw new Error("no geometry for " + w.name);
 const bodensee = lakes.features.find((f) => f.properties.name === "Bodensee");
 water.push({ id: "bodensee", name: "Bodensee", kind: "See", d: Pfine(bodensee), label: xy([9.35, 47.6]), small: true });
+// weitere Seen aus dem Lapbook
+const lake = (src, re) => { const f = src.features.find((x) => re.test((x.properties.name || "") + "|" + (x.properties.name_de || ""))); if (!f) throw new Error("Kein See " + re); return f; };
+water.push({ id: "chiemsee", name: "Chiemsee", kind: "See", d: Pfine(lake(lakesEu, /chiemsee/i)), label: xy([12.45, 47.87]), small: true });
+water.push({ id: "mueritz", name: "Müritz", kind: "See", d: Pfine(lake(lakes, /^Müritz/)), label: xy([12.68, 53.43]), small: true });
+water.push({ id: "starnberg", name: "Starnberger See", kind: "See", d: Pfine(lake(lakesEu, /Starnberger/)), label: xy([11.32, 47.9]), small: true });
 // Seas: rough hit polygons, drawn below the land so only the water part shows.
 water.push({
   id: "nordsee", name: "Nordsee", kind: "Meer", label: xy([7.0, 54.45]),
@@ -157,8 +163,14 @@ const MOUNTAINS = [
   { id: "harz", name: "Harz", label: [10.85, 51.72], ring: [[10.25, 51.8], [10.45, 51.92], [10.8, 51.87], [11.2, 51.75], [11.45, 51.62], [11.3, 51.52], [10.85, 51.53], [10.4, 51.62], [10.22, 51.7]] },
   { id: "erzgebirge", name: "Erzgebirge", label: [13.15, 50.62], ring: [[12.3, 50.38], [12.5, 50.58], [12.9, 50.7], [13.35, 50.82], [13.75, 50.85], [14.0, 50.83], [13.95, 50.72], [13.5, 50.55], [13.1, 50.45], [12.7, 50.35]] },
   { id: "bayerwald", name: "Bayerischer Wald", label: [13.1, 49.0], ring: [[12.4, 49.15], [12.8, 49.33], [13.2, 49.15], [13.55, 48.95], [13.83, 48.78], [13.6, 48.6], [13.3, 48.65], [12.95, 48.85], [12.5, 49.0]] },
+  // weitere Gebirge aus dem Lapbook
+  { id: "rhoen", name: "Rhön", label: [9.98, 50.47], ring: [[9.75, 50.62], [9.98, 50.72], [10.2, 50.62], [10.25, 50.4], [10.08, 50.22], [9.85, 50.25], [9.7, 50.42]] },
+  { id: "fichtelgebirge", name: "Fichtelgebirge", label: [11.9, 50.04], ring: [[11.7, 50.15], [11.95, 50.18], [12.15, 50.05], [12.05, 49.92], [11.8, 49.92], [11.65, 50.02]] },
+  { id: "thueringerwald", name: "Thüringer Wald", label: [10.8, 50.72], ring: [[10.25, 51.0], [10.5, 50.98], [10.9, 50.78], [11.25, 50.58], [11.42, 50.47], [11.25, 50.4], [10.85, 50.6], [10.48, 50.8], [10.2, 50.92]] },
+  // Zugspitze: höchster Berg, als kleiner Punkt
+  { id: "zugspitze", name: "Zugspitze", label: [10.985, 47.421], small: true, ring: Array.from({ length: 12 }, (_, i) => [10.985 + 0.07 * Math.cos((i * Math.PI) / 6), 47.421 + 0.045 * Math.sin((i * Math.PI) / 6)]) },
 ];
-const mountains = MOUNTAINS.map((m) => ({ id: m.id, name: m.name, d: P(handPoly(m.ring)), label: xy(m.label) }));
+const mountains = MOUNTAINS.map((m) => ({ id: m.id, name: m.name, d: P(handPoly(m.ring)), label: xy(m.label), small: !!m.small }));
 const alpen = { name: "Alpen", d: P(handPoly([[5.8, 45.5], [6.8, 46.5], [7.9, 46.9], [9.0, 47.15], [9.6, 47.4], [10.2, 47.5], [11.0, 47.5], [12.0, 47.62], [12.9, 47.68], [14.0, 47.82], [15.5, 47.9], [16.3, 47.85], [17.0, 45.5]])), label: xy([12.3, 47.25]) };
 
 const sea = `M0,0H${W}V${H}H0Z`;

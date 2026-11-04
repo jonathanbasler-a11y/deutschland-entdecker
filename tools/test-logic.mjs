@@ -13,24 +13,48 @@ assert.equal(j("Rheinland Pfalz", ["Rheinland-Pfalz"]).kind, "spelling");
 assert.equal(j("Bayrischer Wald", ["Bayerischer Wald", "Bayrischer Wald"]).ok, true);
 assert.equal(j("  Schwäbische Alb ", ["Schwäbische Alb"]).ok, true);
 assert.equal(j("Schwaebische Alb", ["Schwäbische Alb"]).ok, true);
-// knapp daneben und falsch
-assert.equal(j("Niedersachen", ["Niedersachsen"]).kind, "close");
-assert.equal(j("Niedersachen", ["Niedersachsen"]).ok, false);
-assert.equal(j("Hesen", ["Hessen"]).kind, "close");
-assert.equal(j("Hamburg", ["Bremen"]).kind, "wrong");
-assert.equal(j("Rhein", ["Donau"]).kind, "wrong");
-assert.equal(j("", ["Harz"]).kind, "empty");
-// kurze Namen (ab 4 Buchstaben): ein Tippfehler ist "knapp", aber nicht richtig
-assert.equal(j("Harx", ["Harz"]).kind, "close");
-assert.equal(j("Mertz", ["Merz", "Friedrich Merz"]).kind, "close");
-assert.equal(j("Rot", ["Rom"]).kind, "wrong");
-// Schreibfehler aus dem Lapbook
-assert.equal(j("Denemark", ["Dänemark"]).kind, "close");
-assert.equal(j("Niderlande", ["Niederlande"]).kind, "close");
-assert.equal(j("Schweitz", ["Schweiz"]).kind, "close");
+// Rechtschreibung ist zweitrangig: kleine Schreibfehler gelten als richtig ("typo")
+const typo = (i, n, o) => { const r = L.judge(i, n, o); return r.ok && r.kind === "typo"; };
+assert.ok(typo("Niedersachen", ["Niedersachsen"]));
+assert.ok(typo("Hesen", ["Hessen"]));
+assert.ok(typo("Harx", ["Harz"]));
+assert.ok(typo("Mertz", ["Merz", "Friedrich Merz"]));
+assert.equal(L.judge("Mertz", ["Merz", "Friedrich Merz"]).canonical, "Merz");
+// echte Schreibfehler aus dem Lapbook
+assert.ok(typo("Denemark", ["Dänemark"]));
+assert.ok(typo("Niderlande", ["Niederlande"]));
+assert.ok(typo("Schweitz", ["Schweiz"]));
+assert.ok(typo("Österoich", ["Österreich"]));
+assert.ok(typo("nidersachsen", ["Niedersachsen"]));
+assert.ok(typo("Badenwürtten Berg", ["Baden-Württemberg"]));
+assert.ok(typo("martz 2029", ["März 2029"]));
+assert.equal(j("weser", ["Weser"]).kind, "case");
+// zu weit weg bleibt falsch
 assert.equal(j("Luchsenburg", ["Luxemburg"]).ok, false);
 assert.equal(j("Reien", ["Rhein"]).ok, false);
-assert.equal(j("weser", ["Weser"]).kind, "case");
+assert.equal(j("Hamburg", ["Bremen"]).kind, "wrong");
+assert.equal(j("Rhein", ["Donau"]).kind, "wrong");
+assert.equal(j("Rot", ["Rom"]).kind, "wrong");
+assert.equal(j("2029", ["März 2029"]).ok, false);
+assert.equal(j("", ["Harz"]).kind, "empty");
+// ein anderer Begriff ist nie ein Tippfehler des gesuchten
+assert.equal(j("Sachsen", ["Sachsen-Anhalt"]).ok, false);
+assert.equal(L.judge("Ostse", ["Nordsee"], ["Ostsee"]).ok, false);
+assert.equal(L.judge("Bremen", ["Bremen"], ["Bayern"]).kind, "exact");
+assert.equal(L.judge("Brmen", ["Bremen"], ["Bayern"]).ok, true);
+assert.equal(L.judge("Main", ["Rhein"], ["Main"]).ok, false);
+// mehrere Antworten in einer Zeile
+const all = (i) => L.judgeAll(i, ["Nordsee", "Ostsee"]);
+assert.ok(all("Nordsee und Ostsee").ok);
+assert.ok(all("Ostsee, Nordsee").ok);
+assert.ok(all("nordsee ostsee").ok);
+assert.equal(all("Nordse und Ostse").kind, "typo");
+assert.equal(all("Nordsee").kind, "partial");
+assert.deepEqual(all("Nordsee").missing, ["Ostsee"]);
+assert.equal(all("Österreich").kind, "wrong");
+assert.equal(all("").kind, "empty");
+assert.ok(L.judgeAll("Berlin, Hamburg und München", ["Berlin", "Hamburg", "München"]).ok);
+assert.equal(L.judgeAll("Berlin Hamburg", ["Berlin", "Hamburg", "München"]).kind, "partial");
 // Buchstaben-Vergleich
 const marked = (d, side) => d[side].filter(([, ok]) => !ok).map(([c]) => c).join("");
 let d = L.diffMark("Denemark", "Dänemark");

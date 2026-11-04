@@ -29,9 +29,13 @@
     return prev[n];
   }
 
+  // Rechtschreibung ist zweitrangig: so viele Tippfehler sind je nach Wortlänge erlaubt.
+  const tolerance = (len) => (len < 4 ? 0 : len < 8 ? 1 : len < 12 ? 2 : 3);
+
   // names[0] ist die richtige Schreibweise, der Rest sind erlaubte Varianten.
-  // kind: exact | case | spelling (richtig, aber Hinweis) | close (knapp daneben) | wrong | empty
-  function judge(input, names) {
+  // others: Namen anderer Begriffe; ein Tippfehler zählt nur, wenn er keinem anderen Begriff näher ist.
+  // kind: exact | case | spelling (Umlaut/Bindestrich) | typo (kleiner Schreibfehler, gilt als richtig) | wrong | empty
+  function judge(input, names, others) {
     const raw = String(input || "").trim();
     if (!raw) return { ok: false, kind: "empty", canonical: names[0] };
     const n = norm(raw);
@@ -41,11 +45,29 @@
         return { ok: true, kind, canonical: name };
       }
     }
+    let best = null, bestD = Infinity;
     for (const name of names) {
-      const t = norm(name);
-      if (t.length >= 4 && lev(t, n) <= 1) return { ok: false, kind: "close", canonical: names[0] };
+      const d = lev(norm(name), n);
+      if (d < bestD) { bestD = d; best = name; }
     }
+    const nearOther = (others || []).some((o) => lev(norm(o), n) <= bestD);
+    if (best && bestD <= tolerance(norm(best).length) && !nearOther) return { ok: true, kind: "typo", canonical: best };
     return { ok: false, kind: "wrong", canonical: names[0] };
+  }
+
+  // Mehrere Antworten in einer Zeile, z. B. "Nordsee und Ostsee" (Reihenfolge egal).
+  function judgeAll(input, required) {
+    const raw = String(input || "").trim();
+    if (!raw) return { ok: false, kind: "empty", canonical: required.join(" und "), found: [], missing: required.slice() };
+    const tokens = raw.split(/\s*(?:,|;|\/|&|\+|\bund\b|\s)\s*/i).filter(Boolean);
+    const found = [], missing = [];
+    let typo = false;
+    for (const req of required) {
+      const hit = tokens.map((t) => judge(t, [req], required.filter((r) => r !== req))).find((j) => j.ok);
+      if (hit) { found.push(req); if (hit.kind !== "exact") typo = true; } else missing.push(req);
+    }
+    const ok = missing.length === 0;
+    return { ok, kind: ok ? (typo ? "typo" : "exact") : found.length ? "partial" : "wrong", canonical: required.join(" und "), found, missing };
   }
 
   // "84", "84 Mio.", "84 Millionen", "84.000.000" -> in Millionen
@@ -123,7 +145,7 @@
     return names.slice().sort((x, y) => lev(norm(x), n) - lev(norm(y), n))[0];
   }
 
-  const api = { norm, lev, judge, judgeNumber, gradeFor, sample, shuffle, diffMark, closest };
+  const api = { norm, lev, judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, tolerance };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DELogic = api;
 })(typeof self !== "undefined" ? self : this);
