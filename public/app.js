@@ -1,6 +1,6 @@
 "use strict";
 (function () {
-  const { judge, judgeNumber, gradeFor, sample, shuffle } = DELogic;
+  const { judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
   const TEST = window.__DE_TEST || {};
@@ -75,11 +75,11 @@
     { id: "mission1", icon: "🎯", name: "Mission erfüllt", desc: "Die erste Tagesmission geschafft", ok: () => S.missionsDone >= 1 },
     { id: "mission3", icon: "🏅", name: "Dranbleiber", desc: "3 Tagesmissionen geschafft", ok: () => S.missionsDone >= 3 },
     { id: "stumm", icon: "🗺️", name: "Kartenzeichner", desc: "Eine stumme Karte ganz ohne Fehler", ok: () => !!S.blankPerfect },
-    { id: "laender", icon: "🏙️", name: "Länder-Kenner", desc: "Alle 16 Bundesländer mit 3 Sternen", ok: () => full("states") },
-    { id: "nachbarn", icon: "🧭", name: "Nachbarn-Profi", desc: "Alle 9 Nachbarländer mit 3 Sternen", ok: () => full("neighbors") },
-    { id: "fluss", icon: "🌊", name: "Flussprofi", desc: "Rhein, Donau, Elbe, Weser und Neckar mit 3 Sternen", ok: () => ["rhein", "donau", "elbe", "weser", "neckar"].every((k) => stars(BY_ID["w_" + k]) === 3) },
-    { id: "wasser", icon: "⚓", name: "Wassermeister", desc: "Alle 8 Gewässer mit 3 Sternen", ok: () => full("water") },
-    { id: "gipfel", icon: "⛰️", name: "Gipfelstürmer", desc: "Alle 7 Gebirge mit 3 Sternen", ok: () => full("mountains") },
+    { id: "laender", icon: "🏙️", name: "Länder-Kenner", desc: `Alle ${catItems("states").length} Bundesländer mit 3 Sternen`, ok: () => full("states") },
+    { id: "nachbarn", icon: "🧭", name: "Nachbarn-Profi", desc: `Alle ${catItems("neighbors").length} Nachbarländer mit 3 Sternen`, ok: () => full("neighbors") },
+    { id: "fluss", icon: "🌊", name: "Flussprofi", desc: "Alle Flüsse mit 3 Sternen", ok: () => catItems("water").filter((i) => i.kind === "Fluss").every((i) => stars(i) === 3) },
+    { id: "wasser", icon: "⚓", name: "Wassermeister", desc: `Alle ${catItems("water").length} Flüsse, Seen und Meere mit 3 Sternen`, ok: () => full("water") },
+    { id: "gipfel", icon: "⛰️", name: "Gipfelstürmer", desc: `Alle ${catItems("mountains").length} Gebirge und Berge mit 3 Sternen`, ok: () => full("mountains") },
     { id: "allg", icon: "💡", name: "Allgemeinwissen", desc: "Alle Fragen zu Allgemeines gemeistert", ok: () => full("general") },
     { id: "serie3", icon: "🔥", name: "3 Tage in Folge", desc: "Drei Tage hintereinander geübt", ok: () => streak() >= 3 },
     { id: "serie5", icon: "🌟", name: "5 Tage in Folge", desc: "Fünf Tage hintereinander geübt", ok: () => streak() >= 5 },
@@ -162,7 +162,7 @@
   const applyCalm = () => document.body.classList.toggle("calm", !!S.calm);
 
   /* ================= Karte ================= */
-  const BIG_HIT = { s_hb: 30, s_hh: 28, s_be: 28 };
+  const BIG_HIT = { s_hb: 30, s_hh: 28, s_be: 28, w_chiemsee: 24, w_starnberg: 22, w_mueritz: 24, m_zugspitze: 28 };
   function mapMarkup() {
     const M = MAP;
     let s = `<svg class="map" viewBox="0 0 ${M.W} ${M.H}" role="img" aria-label="Karte von Deutschland"><rect class="sea" width="${M.W}" height="${M.H}"/>`;
@@ -181,6 +181,9 @@
     return s;
   }
   const idsOf = (cat) => new Set(catItems(cat).map((i) => i.id));
+  const askOf = (it) => it.ask || CATS[it.cat].ask;
+  // Namen der anderen Begriffe derselben Art: ein Tippfehler darf keinem anderen Begriff näher sein
+  const othersOf = (it) => catItems(it.cat).filter((x) => x.id !== it.id).flatMap((x) => [x.name].concat(x.alts));
 
   // Welches Ding wurde getippt? Nicht gesuchte Flächen (Gebirge, Flüsse) sind durchlässig.
   function pick(evt, cand) {
@@ -205,9 +208,11 @@
   // Fokus: alles außer dem markierten Gebiet abdunkeln
   const focusMap = (on) => { const m = $(".stage .map"); if (m) m.classList.toggle("focus", !!on); };
   const labelCls = { states: "", neighbors: "t-nb", water: "t-water", mountains: "t-mtn" };
+  // Position der Beschriftung (manche kleinen Seen liegen dicht beieinander)
+  const textAt = (it) => { const d = LABEL_SHIFT[it.id] || [0, 0]; return [it.label[0] + d[0], it.label[1] + d[1]]; };
   function labels(items) {
     const l = $("#lab");
-    l.innerHTML = items.map((it) => `<text class="${labelCls[it.cat]}" x="${it.label[0]}" y="${it.label[1]}" ${it.small ? 'style="font-size:15px"' : ""}>${esc(it.name)}</text>`).join("");
+    l.innerHTML = items.map((it) => { const [x, y] = textAt(it); return `<text class="${labelCls[it.cat]}" x="${x}" y="${y}" ${it.small ? 'style="font-size:15px"' : ""}>${esc(it.name)}</text>`; }).join("");
   }
 
   const blend = (a, b, t) => {
@@ -382,7 +387,7 @@
       const it = BY_ID[r.id];
       D.sel = it.id;
       clearHL(); apply(); highlight(it);
-      const kind = it.cat === "water" ? it.kind : it.cat === "states" ? "Bundesland" : it.cat === "neighbors" ? "Nachbarland" : "Gebirge";
+      const kind = it.kind || (it.cat === "states" ? "Bundesland" : it.cat === "neighbors" ? "Nachbarland" : "Gebirge");
       $("#info").innerHTML = `<div class="kind">${kind}</div><h2>${esc(it.name)}</h2><p>${esc(it.info)}</p><button class="speak" data-act="say" data-v="${esc(it.name)}. ${esc(it.info)}" style="margin-top:10px">🔊 Vorlesen</button>`;
       if (S.speak || S.autoRead) say(it.name);
       tone("ok");
@@ -397,7 +402,11 @@
 
   /* ================= Spielrunden ================= */
   const nameList = (it) => [it.name].concat(it.alts);
-  const weight = (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0);
+  // Schreibfallen aus dem Lapbook kommen beim Schreiben öfter dran, bis sie sicher sitzen
+  const trap = (it, skill) => !!LAPBOOK_SPELLING[it.id] && it.skills.includes("write") && (skill === "write" || !skill) && lvl(it.id, "write") < 2;
+  const focus = (it) => FOCUS.includes(it.id) && stars(it) < it.skills.length;
+  const weightFor = (skill) => (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0) + (trap(it, skill) ? 3 : 0) + (focus(it) ? 8 : 0);
+  const weight = weightFor(null);
   const roundLen = () => [5, 8, 12].includes(+S.roundLen) ? +S.roundLen : 8;
   function poolFor(topic, skill) {
     let l = topic === "all" ? ITEMS : ITEMS.filter((i) => i.cat === topic);
@@ -410,12 +419,12 @@
         const skill = it.cat === "general" ? (it.skills.includes("write") && rnd() > 0.5 ? "write" : "choice") : rnd() > 0.4 ? "write" : "tap";
         q.push({ it, skill });
       });
-      add("general", 5); add("neighbors", 4); add("states", 6); add("water", 4); add("mountains", 3);
+      add("general", 6); add("neighbors", 4); add("states", 5); add("water", 4); add("mountains", 3);
       return shuffle(q);
     }
     if (mode === "mission") {
       const sk = MISSION[Math.min(2, missionStep())].skill;
-      return sample(poolFor("all", sk), MISSION_LEN, weight).map((it) => ({ it, skill: sk }));
+      return sample(poolFor("all", sk), MISSION_LEN, weightFor(sk)).map((it) => ({ it, skill: sk }));
     }
     if (mode === "blitz") return shuffle(poolFor(topic, "tap")).concat(shuffle(poolFor(topic, "tap"))).map((it) => ({ it, skill: "tap" }));
     if (mode === "mix") {
@@ -425,7 +434,9 @@
         return { it, skill: c[Math.floor(Math.random() * c.length)] };
       });
     }
-    return sample(poolFor(topic, mode), roundLen(), weight).map((it) => ({ it, skill: mode }));
+    let pool = poolFor(topic, mode), n = roundLen(), first = [];
+    if (TEST.forceFirst && pool.some((i) => i.id === TEST.forceFirst)) { first = [BY_ID[TEST.forceFirst]]; pool = pool.filter((i) => i.id !== TEST.forceFirst); n--; }
+    return first.concat(sample(pool, n, weightFor(mode))).map((it) => ({ it, skill: mode }));
   }
 
   function gameShell(mode) {
@@ -557,8 +568,8 @@
     const it = q.it;
     highlight(it);
     const opts = shuffle([it, ...distractors(it)]);
-    $("#panel").innerHTML = `<div class="prompt"><small>Auswählen</small><h2>${CATS[it.cat].ask}</h2></div><div class="opts">${opts.map((o) => `<button class="opt" data-a="opt" data-id="${o.id}">${esc(o.name)}</button>`).join("")}</div><div id="fb"></div><div id="act"></div>`;
-    readAloud(CATS[it.cat].ask);
+    $("#panel").innerHTML = `<div class="prompt"><small>Auswählen</small><h2>${askOf(it)}</h2></div><div class="opts">${opts.map((o) => `<button class="opt" data-a="opt" data-id="${o.id}">${esc(o.name)}</button>`).join("")}</div><div id="fb"></div><div id="act"></div>`;
+    readAloud(askOf(it));
     R.onPanel = (b) => {
       if (b.dataset.a !== "opt" || R.lock) return;
       R.lock = true;
@@ -595,25 +606,34 @@
   function renderWrite(q) {
     const it = q.it;
     highlight(it);
-    const inp = writeForm(CATS[it.cat].ask + " Schreibe den Namen.", "Name eintippen");
-    readAloud(CATS[it.cat].ask);
+    const inp = writeForm(askOf(it) + " Schreibe den Namen.", "Name eintippen");
+    readAloud(askOf(it));
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
       if (R.lock) { if (R.waitNext) next(); return; }
-      const j = judge(inp.value, nameList(it));
+      const j = judge(inp.value, nameList(it), othersOf(it));
       if (j.kind === "empty") return inp.focus();
       finishWrite(q, j, inp, it.name, () => { clearHL(); highlight(it, "ok"); labels([it]); }, wrongTip(it, j.kind));
     };
   }
-  // gemeinsame Auswertung für Schreib-Aufgaben
-  function finishWrite(q, j, inp, correct, reveal, tip) {
+  // Deine Schreibweise und die richtige untereinander, falsche Buchstaben markiert
+  function diffHtml(input, correct) {
+    if (!String(input || "").trim() || !correct) return "";
+    const d = diffMark(input, correct);
+    const mine = d.mine.map(([c, ok]) => (ok ? esc(c) : `<del>${esc(c)}</del>`)).join("");
+    const right = d.right.map(([c, ok]) => (ok ? esc(c) : `<mark>${esc(c)}</mark>`)).join("");
+    return `<div class="diff"><div><small>Du:</small><span>${mine}</span></div><div><small>Richtig:</small><span>${right}</span></div></div>`;
+  }
+  // gemeinsame Auswertung für Schreib-Aufgaben (target: Schreibweise für den Buchstaben-Vergleich)
+  function finishWrite(q, j, inp, correct, reveal, tip, target) {
+    if (target === undefined) target = correct;
     if (j.ok) {
       R.lock = true; inp.classList.add("ok");
       reveal();
-      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig: ${esc(correct)}</small>` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(correct)}</small>` : "";
-      fb("ok", pr() + note);
+      const note = j.kind === "spelling" || j.kind === "typo" ? `<small>Kleiner Schreibtipp, so schreibt man es:</small>${diffHtml(inp.value, j.canonical || target)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical || correct)}</small>` : "";
+      fb("ok", pr() + (note ? " 👍" : "") + note);
       commit(q, R.attempt === 0 ? "first" : "second");
-      return later(next, note ? 1800 : 1000);
+      return later(next, note ? 2200 : 1000);
     }
     R.attempt++;
     inp.classList.add("bad");
@@ -622,7 +642,7 @@
       R.lock = true; R.waitNext = true;
       const ws = $("#ws"); ws.textContent = "Weiter"; ws.classList.add("next");
       reveal();
-      fb("bad", `Richtig ist: ${esc(correct)}${j.kind === "close" ? "<small>Das war knapp daneben.</small>" : ""}`);
+      fb("bad", `Richtig ist: ${esc(correct)}${target ? diffHtml(inp.value, target) : ""}`);
       commit(q, "fail");
       return;
     }
@@ -657,9 +677,10 @@
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
       if (R.lock) { if (R.waitNext) next(); return; }
-      const j = w.num ? judgeNumber(inp.value, w.num, w.show) : judge(inp.value, w.answers);
+      const j = w.num ? judgeNumber(inp.value, w.num, w.show) : w.all ? judgeAll(inp.value, w.all) : judge(inp.value, w.answers);
       if (j.kind === "empty") return inp.focus();
-      finishWrite(q, j, inp, w.show, () => {}, j.kind === "close" ? "Fast! Schau noch einmal genau auf die Buchstaben." : "Nicht ganz. Überlege noch einmal.");
+      const tip = j.kind === "partial" ? `Gut, ${esc(j.found.join(" und "))} stimmt! Es fehlt noch ${j.missing.length === 1 ? "eins" : j.missing.length}.` : "Nicht ganz. Überlege noch einmal.";
+      finishWrite(q, j, inp, w.show, () => {}, tip, w.num ? null : w.all ? (j.ok ? j.canonical : null) : closest(inp.value, w.answers));
     };
   }
 
@@ -704,10 +725,13 @@
   }
   function startBlank(cat, onlyIds) {
     closeModal();
-    // Nummern von Nord nach Süd, wie auf einem Arbeitsblatt
-    const all = catItems(cat).slice().sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0]);
+    // Nummern wie im Lapbook (Gebirge, Gewässer), sonst von Nord nach Süd wie auf einem Arbeitsblatt
+    const items = catItems(cat);
+    const lapbook = items.every((it) => BLANK_NUM[it.id]);
     const nums = {};
-    all.forEach((it, i) => { nums[it.id] = i + 1; });
+    if (lapbook) items.forEach((it) => { nums[it.id] = BLANK_NUM[it.id]; });
+    else items.slice().sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0]).forEach((it, i) => { nums[it.id] = i + 1; });
+    const all = items.slice().sort((a, b) => nums[a.id] - nums[b.id]);
     const ask = onlyIds ? all.filter((it) => onlyIds.includes(it.id)) : all;
     view = "game";
     R = { tok: Math.random(), mode: "blank", cat, all, nums, q: ask, queue: ask.map((it) => it.id), status: {}, results: [], xp: 0, hits: 0, t0: Date.now(), i: 0, onlyIds };
@@ -717,7 +741,7 @@
     const svg = $(".stage .map");
     svg.classList.toggle("show-mtn", cat === "mountains");
     svg.classList.add("focus", "blankmap");
-    $("#panel").innerHTML = `<div class="prompt"><small>Stumme Karte · ${CATS[cat].name}</small><h2>Wie heißt <span class="numbadge" id="bnum"></span>?</h2></div>
+    $("#panel").innerHTML = `<div class="prompt"><small>Stumme Karte · ${CATS[cat].name}${lapbook ? " · Nummern wie im Lapbook" : ""}</small><h2>Wie heißt <span class="numbadge" id="bnum"></span>?</h2></div>
       <div class="seg" role="group" aria-label="Antwortart"><button data-a="bm" data-v="write" class="segbtn" aria-pressed="false">✏️ Schreiben</button><button data-a="bm" data-v="bank" class="segbtn" aria-pressed="false">🔤 Wortkasten</button></div>
       <div id="bans"></div><div id="fb"></div><div class="numgrid" id="bgrid" aria-label="Alle Nummern"></div>`;
     R.onPanel = blankPanel;
@@ -753,7 +777,7 @@
       const n = R.nums[it.id], st = R.status[it.id], cur = it.id === R.cur && !blankDone(it.id);
       const [x, y] = it.label;
       let s = `<g class="num ${cur ? "cur" : st || "open"}" data-num="${it.id}"><circle cx="${x}" cy="${y}" r="${cur ? 21 : 16}"/><text x="${x}" y="${y + 6}">${n}</text></g>`;
-      if (st === "ok" || st === "bad" || st === "known") s += `<text class="numlab ${st}" x="${x}" y="${y + 36}">${esc(it.name)}</text>`;
+      if (st === "ok" || st === "bad" || st === "known") { const [tx, ty] = textAt(it); s += `<text class="numlab ${st}" x="${tx}" y="${(LABEL_SHIFT[it.id] ? ty : y) + 36}">${esc(it.name)}</text>`; }
       return s;
     }).join("");
     $("#bgrid").innerHTML = R.all.map((it) => `<button class="nb-cell ${it.id === R.cur && !blankDone(it.id) ? "cur" : R.status[it.id] || "open"}" data-a="jump" data-id="${it.id}" ${blankDone(it.id) ? "disabled" : ""}>${R.nums[it.id]}</button>`).join("");
@@ -782,16 +806,16 @@
     R.lock = true;
     R.status[it.id] = "ok";
     clearHL(); highlight(it, "ok");
-    fb("ok", pr() + (kindNote || ""));
+    fb("ok", pr() + (kindNote ? " 👍" + kindNote : ""));
     commit({ it, skill }, R.attempt === 0 ? "first" : "second");
     drawNums();
-    later(blankNext, kindNote ? 1500 : 800);
+    later(blankNext, kindNote ? 2200 : 800);
   }
-  function blankFailed(it, skill) {
+  function blankFailed(it, skill, typed) {
     R.lock = true; R.waitNext = true;
     R.status[it.id] = "bad";
     clearHL(); highlight(it, "ok");
-    fb("bad", `Nummer ${R.nums[it.id]} ist: ${esc(it.name)}${S.blankMode === "bank" ? `<button class="btn" data-a="bnext" id="bnx" type="button" style="margin-top:10px;width:100%">Weiter</button>` : ""}`);
+    fb("bad", `Nummer ${R.nums[it.id]} ist: ${esc(it.name)}${typed ? diffHtml(typed, it.name) : ""}${S.blankMode === "bank" ? `<button class="btn" data-a="bnext" id="bnx" type="button" style="margin-top:10px;width:100%">Weiter</button>` : ""}`);
     commit({ it, skill }, "fail");
     drawNums();
     const bs = $("#bs");
@@ -801,17 +825,17 @@
     e.preventDefault();
     if (R.lock) { if (R.waitNext) blankNext(); return; }
     const it = BY_ID[R.cur], inp = $("#bi");
-    const j = judge(inp.value, nameList(it));
+    const j = judge(inp.value, nameList(it), othersOf(it));
     if (j.kind === "empty") return inp.focus();
     if (j.ok) {
       inp.classList.add("ok");
-      const note = j.kind === "spelling" ? `<small>So schreibt man es richtig: ${esc(it.name)}</small>` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(it.name)}</small>` : "";
+      const note = j.kind === "spelling" || j.kind === "typo" ? `<small>Kleiner Schreibtipp, so schreibt man es:</small>${diffHtml(inp.value, j.canonical)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical)}</small>` : "";
       return blankSolved(it, "write", note);
     }
     R.attempt++;
     inp.classList.add("bad");
     setTimeout(() => inp.classList.remove("bad"), 600);
-    if (R.attempt >= 2) return blankFailed(it, "write");
+    if (R.attempt >= 2) return blankFailed(it, "write", inp.value);
     tone("bad");
     fb("hint", wrongTip(it, j.kind));
     inp.select();
@@ -923,7 +947,8 @@
       const g = svg.querySelector("#nums");
       g.innerHTML = r.all.map((it) => {
         const st = r.status[it.id] || "open", [x, y] = it.label;
-        return `<g class="num ${st}"><circle cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y + 6}">${r.nums[it.id]}</text></g><text class="numlab ${st}" x="${x}" y="${y + 36}">${esc(it.name)}</text>`;
+        const [tx, ty] = textAt(it);
+        return `<g class="num ${st}"><circle cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y + 6}">${r.nums[it.id]}</text></g><text class="numlab ${st}" x="${tx}" y="${(LABEL_SHIFT[it.id] ? ty : y) + 36}">${esc(it.name)}</text>`;
       }).join("");
     }
   }
@@ -951,6 +976,8 @@
         <div class="bars">${cats.map((c) => { const s = catStars(c); const p = s.max ? Math.round((s.got / s.max) * 100) : 0; return `<div class="barrow"><span>${CATS[c].name}</span><div class="bar"><i style="width:${p}%"></i></div><b>${s.full}/${s.n} sicher</b></div>`; }).join("")}</div>
       </section>
       <section class="card"><h2>Wackelt noch</h2>${never ? `<p class="muted" style="margin-bottom:8px">${never} von ${ITEMS.length} Begriffen wurden noch nie geübt.</p>` : ""}${weak.length ? `<table class="tbl"><thead><tr><th>Begriff</th><th>Sterne</th><th>Fehler</th><th>Fehlt noch</th></tr></thead><tbody>${weak.map((it) => `<tr><td>${esc(it.name)}</td><td>${"★".repeat(stars(it))}${"☆".repeat(it.skills.length - stars(it))}</td><td>${wrongs(it)}</td><td>${miss(it) || "–"}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Bisher wackelt nichts von dem, was schon geübt wurde.</p>`}</section>
+      <section class="card"><h2>Schreibfallen aus dem Lapbook</h2><p class="muted" style="margin-bottom:8px">So stand es im Lapbook. Diese Wörter kommen beim Schreiben öfter dran, bis sie sicher sitzen.</p>
+        <table class="tbl"><thead><tr><th>Richtig</th><th>Im Lapbook</th><th>Schreiben</th></tr></thead><tbody>${Object.entries(LAPBOOK_SPELLING).map(([id, seen]) => { const it = BY_ID[id]; const l = lvl(id, "write"); const label = it.cat === "general" ? (it.g.write ? it.g.write.show : it.name) : it.name; return `<tr><td>${esc(label)}</td><td class="muted">${esc(seen)}</td><td class="${l >= 2 ? "yes" : "no"}">${l >= 2 ? "✓ sicher" : l === 1 ? "fast" : "–"}</td></tr>`; }).join("")}</tbody></table></section>
       <section class="card"><h2>Übungszeit, letzte 7 Tage</h2>
         <div class="days">${days.map((d) => { const m = S.mins[d] || 0; const dt = new Date(d + "T12:00:00"); return `<div class="day"><div class="col"><i style="height:${Math.round((m / maxMin) * 100)}%"></i></div><b>${Math.round(m)}</b><small>${wd[dt.getDay()]}</small></div>`; }).join("")}</div>
         <p class="muted">Minuten pro Tag. Insgesamt ${Math.round(totalMin)} Minuten, ${total()} Aufgaben, ${S.missionsDone || 0} Tagesmissionen, Serie ${streak()} ${streak() === 1 ? "Tag" : "Tage"}.</p>

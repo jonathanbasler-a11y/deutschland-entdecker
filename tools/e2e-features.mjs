@@ -42,7 +42,7 @@ async function answerRight(p) {
   }
   if (await p.$("#wi")) {
     let sol;
-    if (general) { const q = await p.textContent("#wprompt"); sol = await p.evaluate((q) => { const w = window.__DE.ITEMS.find((i) => i.g && i.g.write && i.g.write.q === q).g.write; return w.num ? String(w.num[w.num.length - 2] || w.num[0]) : w.answers[0]; }, q); }
+    if (general) { const q = await p.textContent("#wprompt"); sol = await p.evaluate((q) => { const w = window.__DE.ITEMS.find((i) => i.g && i.g.write && i.g.write.q === q).g.write; return w.num ? String(w.num[w.num.length - 2] || w.num[0]) : w.all ? w.all.join(" und ") : w.answers[0]; }, q); }
     else sol = await solName(p);
     await p.fill("#wi", sol); await p.press("#wi", "Enter"); return;
   }
@@ -193,6 +193,105 @@ async function playRound(p, max = 30) {
   await ctx.close();
 }
 
+// 3b) Lapbook: Nummern wie im Lapbook, Buchstaben-Vergleich bei Schreibfehlern
+{
+  const { ctx, p } = await fresh();
+  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blank"][data-v="water"]');
+  check((await p.$eval("#panel", (e) => e.dataset.cur)) === "w_rhein" && (await p.textContent("#bnum")) === "Nummer 1", "Gewässer: Nummer 1 ist der Rhein (wie im Lapbook)");
+  check((await p.$$eval("#bgrid .nb-cell", (e) => e.map((x) => x.textContent).join(","))) === "1,2,3,4,5,6,7,8,9,10,11,12", "Gewässer-Nummern wie im Lapbook (1 Rhein bis 10 Starnberger See, 11/12 Meere)");
+  check((await p.textContent(".prompt small")).includes("wie im Lapbook"), "Hinweis: Nummern wie im Lapbook");
+  await p.click('[data-act="quit"]');
+  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blank"][data-v="mountains"]');
+  check((await p.$$eval("#bgrid .nb-cell", (e) => e.map((x) => x.textContent).join(","))) === "1,2,3,4,5,6,7,8,9,10,11", "Gebirge-Nummern wie im Lapbook (1 bis 10, 11 Zugspitze)");
+  check((await p.$eval("#panel", (e) => e.dataset.cur)) === "m_bayerwald", "Gebirge: Nummer 1 ist der Bayerische Wald");
+  await p.click('[data-act="quit"]');
+  // Nachbarländer: Nummer 1 ist Dänemark; „Denemark“ wie im Lapbook
+  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blank"][data-v="neighbors"]');
+  check((await p.$eval("#panel", (e) => e.dataset.cur)) === "n_dk", "Nachbarländer: Nummer 1 ist Dänemark");
+  await p.fill("#bi", "Denemark"); await p.press("#bi", "Enter");
+  check(!!(await p.$(".feedback.ok")), "„Denemark“ zählt als richtig (Rechtschreibung zweitrangig)");
+  check((await p.textContent("#fb")).includes("Schreibtipp"), "Freundlicher Schreibtipp");
+  check((await p.$$eval(".diff mark", (e) => e.map((x) => x.textContent).join(""))) === "ä", "Vergleich markiert das fehlende ä");
+  check((await p.$$eval(".diff del", (e) => e.map((x) => x.textContent).join(""))) === "e", "Vergleich streicht das falsche e");
+  await shot(p, "diff");
+  await p.click('[data-act="quit"]');
+  // Allgemeines schreiben: „Mertz“
+  await p.click("#more > summary");
+  await p.click('[data-act="topic"][data-v="general"]');
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = "g_kanzler"; });
+  await p.click('[data-act="mode"][data-v="write"]');
+  check((await p.textContent("#wprompt")).includes("Bundeskanzler"), "Erste Schreibfrage: Bundeskanzler");
+  await p.fill("#wi", "Mertz"); await p.press("#wi", "Enter");
+  check(!!(await p.$(".feedback.ok")), "„Mertz“ zählt als richtig");
+  check((await p.$$eval(".diff del", (e) => e.map((x) => x.textContent).join(""))) === "t", "Vergleich streicht das t in Mertz");
+  await p.click('[data-act="quit"]');
+  // Meere: beide Antworten, Teilantwort wird freundlich ergänzt
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = "g_meere"; });
+  await p.click('[data-act="mode"][data-v="write"]');
+  check((await p.textContent("#wprompt")).includes("Meere"), "Schreibfrage Meere");
+  await p.fill("#wi", "Österreich"); await p.press("#wi", "Enter");
+  check((await p.textContent("#fb")).includes("Nicht ganz"), "„Österreich“ ist kein Meer");
+  await p.fill("#wi", "Nordsee"); await p.press("#wi", "Enter");
+  check((await p.textContent("#fb")).includes("Richtig ist: Nordsee und Ostsee"), "Nach zwei Versuchen: Nordsee und Ostsee");
+  await p.click('[data-act="quit"]');
+  await p.click('[data-act="mode"][data-v="write"]');
+  await p.fill("#wi", "Nordsee"); await p.press("#wi", "Enter");
+  check((await p.textContent("#fb")).includes("Es fehlt noch eins"), "Nur Nordsee: es fehlt noch eins");
+  await p.fill("#wi", "Nordsee und Ostsee"); await p.press("#wi", "Enter");
+  check(!!(await p.$(".feedback.ok")), "Nordsee und Ostsee ist richtig");
+  await p.click('[data-act="quit"]');
+  // Wahl: März 2029
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = "g_wahl"; });
+  await p.click('[data-act="mode"][data-v="write"]');
+  await p.fill("#wi", "martz 2029"); await p.press("#wi", "Enter");
+  check(!!(await p.$(".feedback.ok")) && (await p.textContent("#fb")).includes("März 2029"), "„martz 2029“ zählt, Tipp zeigt März 2029");
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = null; });
+  await p.click('[data-act="quit"]');
+  // neue Lapbook-Fragen sind da
+  const ids = await p.evaluate(() => window.__DE.ITEMS.filter((i) => i.cat === "general").map((i) => i.id));
+  check(["g_groesstes", "g_kleinstes", "g_staedte", "g_fluss", "g_meere", "g_flaeche", "g_sprache", "g_praesident", "g_wahl", "g_hymne_text", "g_hymne_melodie", "g_hymne_strophe", "g_hymne_anfang", "g_hymne_seit", "g_hymne_wann", "g_hymne_l1", "g_hymne_l2", "g_hymne_l3", "g_hymne_l4"].every((x) => ids.includes(x)), `Lapbook-Fragen vorhanden (${ids.length} Allgemein-Fragen)`);
+  const mapIds = await p.evaluate(() => window.__DE.ITEMS.map((i) => i.id));
+  check(["w_main", "w_chiemsee", "w_mueritz", "w_starnberg", "m_rhoen", "m_fichtelgebirge", "m_thueringerwald", "m_zugspitze"].every((x) => mapIds.includes(x)), "Lapbook-Karte: Main, Chiemsee, Müritz, Starnberger See, Rhön, Fichtelgebirge, Thüringer Wald, Zugspitze");
+  check(await p.evaluate(() => window.__DE.ITEMS.find((i) => i.id === "g_wahl").g.options[0] === "März 2029"), "Wahl: März 2029");
+  check(p.errors.length === 0, "keine Konsolenfehler (Lapbook) " + p.errors.join(" | "));
+  await ctx.close();
+}
+
+// 3c) Entdecken: jeder einzelne Kartenbegriff lässt sich antippen
+{
+  const { ctx, p } = await fresh();
+  await p.click("#more > summary");
+  await p.click('[data-act="discover"]');
+  const missed = [];
+  for (const cat of ["states", "neighbors", "water", "mountains"]) {
+    await p.click(`[data-act="layer"][data-v="${cat}"]`);
+    const items = await p.evaluate((cat) => window.__DE.ITEMS.filter((i) => i.cat === cat).map((i) => ({ id: i.id, name: i.name })), cat);
+    for (const it of items) {
+      const [x, y] = await p.evaluate((id) => {
+        const svg = document.querySelector(".stage .map");
+        const item = window.__DE.ITEMS.find((i) => i.id === id);
+        let x, y;
+        const hit = svg.querySelector(`.hit[data-id="${id}"]:not(.lakehit):not(.dot)`);
+        if (hit) { const pt = hit.getPointAtLength(hit.getTotalLength() / 2); x = pt.x; y = pt.y; } else [x, y] = item.label;
+        const q = svg.createSVGPoint(); q.x = x; q.y = y; const r = q.matrixTransform(svg.getScreenCTM()); return [r.x, r.y];
+      }, it.id);
+      await p.touchscreen.tap(x, y);
+      const h = await p.$eval("#info h2", (e) => e.textContent).catch(() => "");
+      if (h !== it.name) missed.push(`${it.name} (bekam: ${h || "nichts"})`);
+    }
+  }
+  check(missed.length === 0, "Alle Kartenbegriffe antippbar" + (missed.length ? ": " + missed.join(", ") : ""));
+  await p.click('[data-act="layer"][data-v="mountains"]');
+  await shot(p, "discover-mountains");
+  await p.click('[data-act="layer"][data-v="water"]');
+  await shot(p, "discover-water");
+  check(p.errors.length === 0, "keine Konsolenfehler (Entdecken) " + p.errors.join(" | "));
+  await ctx.close();
+}
+
 // 4) Eltern-Übersicht: Tür, Inhalte, Einstellungen wirken
 {
   const { ctx, p } = await fresh();
@@ -226,6 +325,8 @@ async function playRound(p, max = 30) {
   const txt = await p.textContent(".parents");
   check(/Bereit für die LZK/.test(txt) && /\d+ %/.test(txt), "Zeigt Bereitschaft in Prozent");
   check((await p.$$(".barrow")).length === 5, "5 Themen-Balken");
+  const trapRows = await p.$$eval(".parents section", (secs) => { const s = secs.find((x) => x.textContent.includes("Schreibfallen aus dem Lapbook")); return s ? s.querySelectorAll("tbody tr").length : 0; });
+  check(trapRows === 15, `Schreibfallen aus dem Lapbook: 15 Wörter (${trapRows})`);
   check((await p.$$(".day")).length === 7, "7 Tage Übungszeit");
   check((await p.$$eval(".parents section:nth-of-type(2) tbody tr", (r) => r.length)) > 0, "Liste 'Wackelt noch' hat Einträge");
   await shot(p, "parents");

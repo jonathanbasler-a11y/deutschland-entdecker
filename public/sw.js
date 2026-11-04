@@ -1,5 +1,5 @@
 // Offline-Modus: mit Internet immer die neueste Version laden, ohne Internet aus dem Speicher.
-const CACHE = "de-entdecker-v4";
+const CACHE = "de-entdecker-v8";
 const FILES = ["./", "index.html", "style.css", "logic.js", "mapdata.js", "content.js", "app.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

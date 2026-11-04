@@ -41,7 +41,7 @@ async function answerRight(p) {
   }
   if (await p.$("#wi")) {
     let sol;
-    if (general) { const q = await p.textContent("#wprompt"); sol = await p.evaluate((q) => { const w = window.__DE.ITEMS.find((i) => i.g && i.g.write && i.g.write.q === q).g.write; return w.num ? String(w.num[w.num.length - 2] || w.num[0]) : w.answers[0]; }, q); }
+    if (general) { const q = await p.textContent("#wprompt"); sol = await p.evaluate((q) => { const w = window.__DE.ITEMS.find((i) => i.g && i.g.write && i.g.write.q === q).g.write; return w.num ? String(w.num[w.num.length - 2] || w.num[0]) : w.all ? w.all.join(" und ") : w.answers[0]; }, q); }
     else sol = await p.evaluate((d) => window.__DE.ITEMS.find((i) => i.d === d).name, hlD);
     await p.fill("#wi", sol); await p.press("#wi", "Enter"); return;
   }

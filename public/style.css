@@ -298,3 +298,13 @@ body.calm .mapwrap.shake { animation: none; }
 .gate .glabel { position: relative; }
 @media (max-width: 700px) { .barrow { grid-template-columns: 1fr auto; } .barrow .bar { grid-column: 1 / -1; grid-row: 2; } .tbl { font-size: .85rem; } }
 .mission .mode.big { width: 100%; }
+
+/* Buchstaben-Vergleich bei Schreibfehlern */
+.diff { margin-top: 8px; background: rgba(0, 0, 0, .25); border-radius: 12px; padding: 8px 12px; display: grid; gap: 4px; font-size: 1.25rem; letter-spacing: .04em; }
+.diff div { display: flex; gap: 10px; align-items: baseline; }
+.diff small { font-size: .75rem; letter-spacing: 0; opacity: .8; min-width: 54px; margin: 0; display: inline; }
+.diff mark { background: var(--sun); color: var(--sun-ink); border-radius: 4px; padding: 0 2px; }
+.diff del { color: #fff; background: rgba(255, 107, 107, .55); border-radius: 4px; padding: 0 2px; text-decoration-thickness: 3px; }
+
+/* Zugspitze als roter Punkt wie im Lapbook */
+.map.show-mtn .mtn[data-id="m_zugspitze"] { fill: #d42a2a; stroke: #6b0f0f; stroke-width: 2; }
