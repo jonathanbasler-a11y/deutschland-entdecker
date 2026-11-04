@@ -198,9 +198,20 @@ async function playRound(p, max = 30) {
   const { ctx, p } = await fresh();
   // etwas Fortschritt erzeugen, mit einem Fehler
   await p.click('[data-act="mission"]');
-  await p.click(".opt:not(.ok) >> nth=0").catch(() => {});
-  await p.waitForTimeout(200);
-  if (await p.$("#nx")) await p.click("#nx");
+  // gezielt eine falsche Antwort wählen (nicht einfach die erste, die kann richtig sein)
+  const general = await p.$eval("#stage", (e) => e.classList.contains("general"));
+  let sol;
+  if (await p.$(".flagbox")) sol = null;
+  else if (general) { const q = await p.textContent(".prompt h2"); sol = await p.evaluate((q) => { const g = window.__DE.ITEMS.find((i) => i.g && i.g.q === q).g; return g.options[g.correct]; }, q); }
+  else sol = await solName(p);
+  if (sol) {
+    const opts = await p.$$eval(".opt", (e) => e.map((x) => x.textContent));
+    await p.click(`.opt:text-is("${opts.find((o) => o !== sol)}")`);
+  } else {
+    for (const c of ["Rot", "Schwarz", "Gold", "Rot", "Schwarz", "Gold"]) await p.click(`.fchip[data-n="${c}"]`).catch(() => {});
+  }
+  await p.waitForSelector("#nx", { timeout: 3000 });
+  await p.click("#nx");
   await playRound(p);
   await p.click('[data-act="home"]');
   // kurzes Antippen öffnet nicht
