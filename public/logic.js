@@ -74,11 +74,12 @@
   function judgeNumber(input, accepted, show) {
     const raw = String(input || "").trim();
     if (!raw) return { ok: false, kind: "empty", canonical: show };
-    const m = /^(\d+)\s*(mio\.?|mill\.?|millionen|m)?$/i.exec(raw.replace(/[.\s](?=\d{3}(\D|$))/g, ""));
+    // Tausenderpunkte weg, Komma als Dezimalzeichen ("84,7 Mio." oder "84.700.000")
+    const m = /^(\d+(?:[.,]\d+)?)\s*(mio\.?|mill\.?|millionen|m)?$/i.exec(raw.replace(/[.\s](?=\d{3}(\D|$))/g, ""));
     if (m) {
-      let v = Number(m[1]);
-      if (v >= 1e6) v = Math.round(v / 1e6);
-      if (accepted.includes(v)) return { ok: true, kind: "exact", canonical: show };
+      let v = Number(m[1].replace(",", "."));
+      if (v >= 1e6) v = Math.round(v / 1e5) / 10;
+      if (accepted.some((a) => Math.abs(a - v) < 0.05)) return { ok: true, kind: "exact", canonical: show };
     }
     return { ok: false, kind: "wrong", canonical: show };
   }

@@ -70,9 +70,13 @@ assert.equal(marked(d, "right") + marked(d, "mine"), "", "nur Groß/Klein ist ke
 assert.equal(L.diffMark("", "Harz").right.length, 4);
 assert.equal(L.closest("Hamburk", ["Berlin", "Hamburg", "Bremen"]), "Hamburg");
 // Zahlen
-const num = (i) => L.judgeNumber(i, [83, 84, 85], "ca. 84 Millionen").ok;
-assert.ok(num("84") && num("84 Mio") && num("84 Mio.") && num("84 Millionen") && num("83") && num("84.000.000") && num("84000000"));
-assert.ok(!num("8") && !num("48") && !num("840") && !num("viele") && !num(""));
+const num = (i) => L.judgeNumber(i, [84.7, 84, 85], "84,7 Millionen").ok;
+assert.ok(num("84,7") && num("84.7") && num("84,7 Mio") && num("84,7 Millionen") && num("84.700.000") && num("84700000"));
+assert.ok(num("84") && num("84 Mio") && num("84 Mio.") && num("85") && num("84.000.000"));
+assert.ok(!num("8") && !num("48") && !num("847") && !num("840") && !num("83") && !num("84,2") && !num("viele") && !num(""));
+assert.ok(L.judgeNumber("1991", [1991], "1991").ok);
+assert.ok(!L.judgeNumber("1990", [1991], "1991").ok);
+assert.ok(L.judgeNumber("16", [16], "16").ok && !L.judgeNumber("16,5", [16], "16").ok);
 assert.ok(L.judgeNumber("16", [16], "16").ok && !L.judgeNumber("15", [16], "16").ok);
 // Note
 assert.deepEqual([100, 90, 89, 75, 60, 45, 25, 24, 0].map(L.gradeFor), [1, 1, 2, 2, 3, 4, 5, 6, 6]);

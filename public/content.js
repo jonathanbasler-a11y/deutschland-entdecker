@@ -68,9 +68,9 @@ const WATER_KIND = { rhein: "Fluss", donau: "Fluss", elbe: "Fluss", weser: "Flus
 // Allgemeine Fragen. options + correct = Auswahl, write = Schreiben (nur wenn sinnvoll).
 const GENERAL = [
   { id: "g_einwohner", name: "Einwohnerzahl", q: "Wie viele Menschen leben ungefähr in Deutschland?",
-    options: ["ca. 8 Millionen", "ca. 38 Millionen", "ca. 84 Millionen", "ca. 150 Millionen"], correct: 2,
-    write: { q: "Wie viele Millionen Menschen leben ungefähr in Deutschland? Schreibe die Zahl.", num: [80, 81, 82, 83, 84, 85], show: "ca. 84 Millionen" },
-    info: "In Deutschland leben ungefähr 84 Millionen Menschen." },
+    options: ["ca. 8 Millionen", "ca. 38 Millionen", "ca. 84,7 Millionen", "ca. 150 Millionen"], correct: 2,
+    write: { q: "Wie viele Millionen Menschen leben in Deutschland? Schreibe die Zahl.", num: [84.7, 84, 85], show: "84,7 Millionen" },
+    info: "In Deutschland leben ungefähr 84,7 Millionen Menschen." },
   { id: "g_laender", name: "Zahl der Bundesländer", q: "Aus wie vielen Bundesländern besteht Deutschland?",
     options: ["9", "12", "16", "20"], correct: 2,
     write: { q: "Aus wie vielen Bundesländern besteht Deutschland? Schreibe die Zahl.", num: [16], show: "16" },
