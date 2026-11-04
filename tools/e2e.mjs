@@ -24,6 +24,7 @@ p.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 const shot = (n) => shots && p.screenshot({ path: path.join(shots, n + ".png") });
 await p.goto(url);
 await p.click('[data-act="skipname"]');
+await p.click("#more > summary"); // Selbst aussuchen aufklappen (bleibt gespeichert)
 
 // Anker-Punkt eines Items in Bildschirmkoordinaten
 const anchor = (id) => p.evaluate((id) => {

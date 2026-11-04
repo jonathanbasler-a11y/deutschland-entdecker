@@ -34,6 +34,7 @@ for (const [name, w, h] of DEVICES) {
   p.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   await p.goto(url);
   await p.click('[data-act="skipname"]');
+  await p.click("#more > summary");
   const slug = name.replace(/\s+/g, "-");
   const noHScroll = () => p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
   const inView = (sel) => p.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight + 1 && r.left >= 0 && r.right <= innerWidth + 1; });
