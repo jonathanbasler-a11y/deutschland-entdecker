@@ -21,6 +21,7 @@ const ALTS = {
   s_mv: ["Mecklenburg Vorpommern", "MV"],
   s_bw: ["Baden Württemberg"],
   m_bayerwald: ["Bayrischer Wald", "Bayerwald"],
+  n_cz: ["Tschechische Republik"],
   m_alb: ["Schwäbische Alb", "Alb"],
   m_alpenvorland: ["Alpen Vorland"],
 };
@@ -31,7 +32,7 @@ const INFO = {
   n_cz: "Tschechien liegt im Südosten, Hauptstadt: Prag.",
   n_at: "Österreich liegt im Süden, Hauptstadt: Wien.",
   n_ch: "Die Schweiz liegt im Süden, Hauptstadt: Bern.",
-  n_fr: "Frankreich liegt im Westen, Hauptstadt: Paris.",
+  n_fr: "Frankreich liegt im Südwesten, Hauptstadt: Paris.",
   n_lu: "Luxemburg ist ein kleines Land im Westen, Hauptstadt: Luxemburg.",
   n_be2: "Belgien liegt im Westen, Hauptstadt: Brüssel.",
   n_nl: "Die Niederlande liegen im Nordwesten, Hauptstadt: Amsterdam.",
@@ -58,7 +59,7 @@ const WATER_KIND = { rhein: "Fluss", donau: "Fluss", elbe: "Fluss", weser: "Flus
 const GENERAL = [
   { id: "g_einwohner", name: "Einwohnerzahl", q: "Wie viele Menschen leben ungefähr in Deutschland?",
     options: ["ca. 8 Millionen", "ca. 38 Millionen", "ca. 84 Millionen", "ca. 150 Millionen"], correct: 2,
-    write: { q: "Wie viele Millionen Menschen leben ungefähr in Deutschland? Schreibe die Zahl.", num: [83, 84, 85], show: "ca. 84 Millionen" },
+    write: { q: "Wie viele Millionen Menschen leben ungefähr in Deutschland? Schreibe die Zahl.", num: [80, 81, 82, 83, 84, 85], show: "ca. 84 Millionen" },
     info: "In Deutschland leben ungefähr 84 Millionen Menschen." },
   { id: "g_laender", name: "Zahl der Bundesländer", q: "Aus wie vielen Bundesländern besteht Deutschland?",
     options: ["9", "12", "16", "20"], correct: 2,
@@ -105,7 +106,7 @@ MAP.states.forEach((s) => ITEMS.push({
   info: s.name + (STADTSTAATEN.includes(s.name) ? " ist ein Stadtstaat." : " ist ein Bundesland.") + " Hauptstadt: " + s.capital + ".",
 }));
 MAP.neighbors.forEach((n) => ITEMS.push({
-  id: "n_" + n.id, cat: "neighbors", name: n.name, alts: [], d: n.d, label: n.label, small: n.small,
+  id: "n_" + n.id, cat: "neighbors", name: n.name, alts: ALTS["n_" + n.id] || [], d: n.d, label: n.label, small: n.small,
   skills: ["choice", "tap", "write"], info: INFO["n_" + n.id],
 }));
 MAP.water.forEach((w) => ITEMS.push({

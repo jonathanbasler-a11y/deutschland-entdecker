@@ -1,0 +1,31 @@
+// Offline-Test: App einmal laden, Netz trennen, neu laden -> App muss weiter funktionieren.
+import { createRequire } from "node:module";
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+const { chromium } = createRequire(import.meta.url)("playwright");
+const root = path.resolve("public");
+const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".webmanifest": "application/manifest+json" };
+const srv = http.createServer((q, r) => {
+  const f = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]);
+  fs.readFile(f, (e, d) => (e ? (r.writeHead(404), r.end()) : (r.writeHead(200, { "content-type": types[path.extname(f)] || "text/plain" }), r.end(d))));
+}).listen(0);
+const url = `http://localhost:${srv.address().port}/`;
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport: { width: 1180, height: 820 } });
+const p = await ctx.newPage();
+const errors = [];
+p.on("pageerror", (e) => errors.push(String(e)));
+await p.goto(url);
+await p.evaluate(() => navigator.serviceWorker.ready);
+await p.reload();
+await p.waitForSelector(".topic");
+await ctx.setOffline(true);
+await p.reload();
+const ok = await p.waitForSelector(".topic", { timeout: 8000 }).then(() => true, () => false);
+const map = ok && (await p.$$(".map .st")).length === 16;
+await b.close();
+srv.close();
+const good = ok && map && !errors.length;
+console.log(good ? "offline ok" : "offline FEHLER " + errors.join(" | "));
+process.exit(good ? 0 : 1);

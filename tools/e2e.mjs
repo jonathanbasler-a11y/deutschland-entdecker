@@ -30,7 +30,7 @@ const anchor = (id) => p.evaluate((id) => {
   const svg = document.querySelector(".map");
   const it = window.__DE.ITEMS.find((i) => i.id === id);
   let x, y;
-  const hit = svg.querySelector(`.hit[data-id="${id}"]:not(.lakehit)`);
+  const hit = svg.querySelector(`.hit[data-id="${id}"]:not(.lakehit):not(.dot)`);
   if (hit) { const pt = hit.getPointAtLength(hit.getTotalLength() / 2); x = pt.x; y = pt.y; }
   else { [x, y] = it.label; }
   const m = svg.getScreenCTM(), q = svg.createSVGPoint(); q.x = x; q.y = y;
@@ -168,8 +168,9 @@ while (!(await p.$(".results")) && count < 40) {
   else if (await p.$(".fchip")) { for (const c of ["Rot", "Schwarz", "Gold"]) await p.click(`.fchip[data-n="${c}"]`); }
   else if (await p.$("#wi")) { await p.fill("#wi", "falsch"); await p.click("#ws"); }
   else { const [x, y] = await anchor("s_by"); await p.mouse.click(x, y); }
-  await p.waitForSelector("#nx, .results", { timeout: 3000 }).catch(() => {});
+  await p.waitForSelector("#nx, #ws.next, .results", { timeout: 3000 }).catch(() => {});
   if (await p.$("#nx")) await p.click("#nx");
+  else if (await p.$("#ws.next")) await p.click("#ws.next");
   else await p.waitForTimeout(1300);
 }
 check(count === 22, "Probe hat 22 Fragen, war " + count);
