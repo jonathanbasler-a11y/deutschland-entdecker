@@ -531,3 +531,41 @@ body.calm .project .newblock { animation: none; opacity: 0; }
   .bossbar .boss { width: 36px; height: 36px; }
 }
 .gbar.bossmode .gdog .dog { transform: scaleX(-1); }
+
+/* ================= Mehrere Antworten: ein Feld pro Antwort ================= */
+.multi { display: flex; flex-direction: column; gap: 10px; }
+.mrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mrow .mnum { width: 34px; height: 34px; border-radius: 50%; background: var(--panel2); display: grid; place-items: center; font-weight: 800; flex: none; }
+.mrow input { flex: 1; min-width: 0; font: inherit; font-size: 1.3rem; font-weight: 700; padding: 12px 14px; border-radius: 14px; border: 3px solid var(--line); background: #fff; color: #10253a; -webkit-user-select: text; user-select: text; }
+.mrow .mmark { width: 26px; font-size: 1.4rem; font-weight: 900; text-align: center; flex: none; }
+.mrow.ok input { border-color: var(--ok); background: #e5fbf1; }
+.mrow.ok .mmark { color: var(--ok); }
+.mrow.bad input { border-color: var(--bad); background: #ffeaea; }
+.mrow.bad .mmark { color: var(--bad); }
+.msol, .ssol { flex-basis: 100%; margin-left: 44px; color: #8ff0c4; font-weight: 800; }
+.msol::before, .ssol::before { content: "richtig: "; color: var(--muted); font-weight: 600; }
+.multi .btn { margin-top: 4px; }
+
+/* ================= Stumme Karte als ganzes Blatt ================= */
+.stage.sheet .panel { max-height: calc(100vh - 112px); max-height: calc(100dvh - 112px); overflow-y: auto; }
+.sheetlist { display: flex; flex-direction: column; gap: 10px; }
+.srows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 8px 10px; }
+.srow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.srow .numbadge { min-width: 34px; height: 38px; padding: 0 6px; font-weight: 800; font-size: 1.05rem; font-variant-numeric: tabular-nums; flex: none; }
+.srow input { flex: 1; min-width: 0; font: inherit; font-size: .98rem; font-weight: 700; padding: 9px 8px; border-radius: 12px; border: 3px solid var(--line); background: #fff; color: #10253a; -webkit-user-select: text; user-select: text; }
+.srow.cur input { border-color: var(--sun); box-shadow: 0 0 0 2px var(--sun); }
+.srow .smark { width: 18px; font-weight: 900; text-align: center; flex: none; }
+.srow.ok input { border-color: var(--ok); background: #e5fbf1; }
+.srow.ok .smark { color: var(--ok); }
+.srow.wrong input, .srow.bad input { border-color: var(--bad); background: #ffeaea; }
+.srow.wrong .smark, .srow.bad .smark { color: var(--bad); }
+.srow .ssol { margin-left: 46px; font-size: .95rem; }
+.sheetlist .wordbank { margin-top: 4px; }
+.wchip.used { opacity: .35; }
+.sfoot { position: sticky; bottom: -18px; background: var(--panel); padding: 10px 0 4px; }
+.sfoot .btn { width: 100%; }
+.map .numlab.typed { fill: #6a4a00; font-style: italic; }
+@media (max-aspect-ratio: 1/1) {
+  .stage.sheet .panel { order: 0; max-height: none; overflow: visible; }
+  .sfoot { bottom: 0; }
+}

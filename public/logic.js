@@ -70,6 +70,40 @@
     return { ok, kind: ok ? (typo ? "typo" : "exact") : found.length ? "partial" : "wrong", canonical: required.join(" und "), found, missing };
   }
 
+  // Mehrere Felder, je eine Antwort, Reihenfolge egal (wie bei ANTON). Jedes Feld wird für sich bewertet.
+  // Feld: { ok, kind: exact | case | spelling | typo | wrong | dup (schon in einem anderen Feld) | empty, canonical }
+  function judgeEach(inputs, required) {
+    const left = required.slice();
+    const fields = inputs.map((v) => (String(v || "").trim() ? null : { ok: false, kind: "empty" }));
+    // erst genaue Treffer, dann kleine Schreibfehler (damit ein Tippfehler keinem anderen Feld die Antwort wegnimmt)
+    for (const strict of [true, false]) {
+      inputs.forEach((v, k) => {
+        if (fields[k]) return;
+        for (const r of left) {
+          const j = judge(v, [r], required.filter((x) => x !== r));
+          if (j.ok && (!strict || j.kind !== "typo")) { fields[k] = { ok: true, kind: j.kind, canonical: r }; left.splice(left.indexOf(r), 1); break; }
+        }
+      });
+    }
+    inputs.forEach((v, k) => {
+      if (fields[k]) return;
+      const dup = required.some((r) => !left.includes(r) && judge(v, [r]).ok);
+      fields[k] = { ok: false, kind: dup ? "dup" : "wrong" };
+    });
+    return { ok: fields.every((f) => f.ok), fields, missing: left };
+  }
+  // "Nordsee und Ostsee" in einem Feld -> ["Nordsee", "Ostsee"]. An Leerzeichen nur trennen,
+  // wenn jedes Wort für sich eine der Antworten ist ("Schwarzes Meer" bleibt zusammen).
+  function splitAnswers(text, required) {
+    const raw = String(text || "").trim();
+    let parts = raw.split(/\s*(?:,|;|\/|&|\+|\bund\b)\s*/i).filter(Boolean);
+    if (parts.length === 1 && required.length > 1) {
+      const words = raw.split(/\s+/);
+      if (words.length > 1 && words.length <= required.length && words.every((w) => required.some((r) => judge(w, [r]).ok))) parts = words;
+    }
+    return parts;
+  }
+
   // "84", "84 Mio.", "84 Millionen", "84.000.000" -> in Millionen
   function judgeNumber(input, accepted, show) {
     const raw = String(input || "").trim();
@@ -146,7 +180,7 @@
     return names.slice().sort((x, y) => lev(norm(x), n) - lev(norm(y), n))[0];
   }
 
-  const api = { norm, lev, judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, tolerance };
+  const api = { norm, lev, judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, tolerance };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DELogic = api;
 })(typeof self !== "undefined" ? self : this);

@@ -67,8 +67,20 @@ Jeder Begriff hat bis zu 3 Sterne: **Auswählen**, **Finden** (auf der Karte ant
 - **Ruhiger Modus** und **automatisches Vorlesen** in der Eltern-Übersicht
 
 ## Stumme Karte
-Nummern auf der Karte wie im LZK-Arbeitsblatt. Zu jeder Nummer den Namen schreiben oder aus dem Wortkasten antippen.
+Nummern auf der Karte wie im LZK-Arbeitsblatt. Zu jeder Nummer den Namen schreiben oder aus dem Wortkasten antippen. Zwei Arten:
+- **📋 Ganzes Blatt** (voreingestellt, wie in der LZK):
+  - Alle Nummern auf einmal mit einem Feld pro Nummer. Was er schreibt, steht gleich auf der Karte.
+  - Eine Nummer auf der Karte antippen springt zum Feld, das Gebiet leuchtet. Enter springt ins nächste leere Feld.
+  - „Prüfen“ bewertet jedes Feld einzeln (grün/rot). Rote Felder kann er einmal verbessern, danach steht dort die Lösung.
+- **1️⃣ Nummer für Nummer**: eine Nummer nach der anderen, mit Tipps.
+
 Am Ende die ausgefüllte Karte (grün/rot) und „Nur die Fehler nochmal“.
+
+## Fragen mit mehreren Antworten
+Zum Beispiel die drei größten Städte, die drei Stadtstaaten, Nord- und Ostsee: Für jede Antwort gibt es ein eigenes Feld, wie bei ANTON.
+- Die Reihenfolge ist egal, jedes Feld wird für sich geprüft.
+- Richtige Felder bleiben grün. Nur die roten werden verbessert, danach steht die Lösung daneben.
+- Doppelte Antworten werden erkannt. Schreibt er alles in ein Feld („Nordsee und Ostsee“), wird es auf die Felder verteilt.
 
 ## Eltern-Übersicht
 Einstellungen → „Für Eltern: gedrückt halten“. Zeigt Bereitschaft je Thema, was noch wackelt, Übungszeit der letzten 7 Tage,
@@ -92,6 +104,7 @@ node tools/test-rechnen.mjs      # Tests der Rechen-Logik (Aufgaben, Rechentrick
 node tools/e2e.mjs               # Browser-Test, spielt alle Modi durch (braucht Playwright)
 node tools/e2e-rechnen.mjs       # Kopfrechnen: Turm, Fehler, Tagestraining, Blitz, Test, Eltern, iPad-Größen
 node tools/e2e-begleiter.mjs     # Hund, Bauprojekte, Boss am Ende der Etappe, Rennen gegen den Rekord, Effekte
+node tools/e2e-blatt.mjs         # mehrere Antworten in eigenen Feldern, stumme Karte als ganzes Blatt
 node tools/e2e-flows.mjs         # Probe-LZK, Schwächen-Modus, Einstellungen, Speicher, Serie, Countdown
 node tools/e2e-features.mjs      # Tagesmission, Bewegungspause, stumme Karte, Eltern-Übersicht
 node tools/e2e-devices.mjs       # iPad-Größen quer/hoch, Fingertipps, Tastatur, kleine Ziele

@@ -1,6 +1,6 @@
 "use strict";
 (function () {
-  const { judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
+  const { judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
   const B = window.DEBegleiter;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
@@ -12,7 +12,7 @@
     sound: true, speak: false,
     // Einstellungen aus der Eltern-Übersicht
     roundLen: 8, calm: false, autoRead: false, showBlitz: true, lzkDate: LZK_DATE,
-    mission: { day: "", step: 0 }, missionsDone: 0, blankMode: "write", ui: { more: false },
+    mission: { day: "", step: 0 }, missionsDone: 0, blankMode: "write", blankStyle: "sheet", ui: { more: false },
     subject: "de", // gewähltes Fach: "de" (Deutschland) oder eines aus DE_FAECHER
     // Begleiter-Hund (für alle Fächer), Boss-Kämpfe, Geister-Lauf der Blitzrunde
     pet: { name: "Pixel", blocks: 0, bosses: {}, lastGreet: "", petted: 0, stage: 0, gear: 0 }, bossOn: true, blitzTrace: [],
@@ -631,7 +631,10 @@
         q.push({ it, skill });
       });
       add("general", 6); add("neighbors", 4); add("states", 5); add("water", 4); add("mountains", 3);
-      return shuffle(q);
+      const out = shuffle(q);
+      // Tests: bestimmte Frage zuerst (als Schreibfrage, wenn es eine gibt)
+      if (TEST.forceFirst && BY_ID[TEST.forceFirst]) { const it = BY_ID[TEST.forceFirst]; return [{ it, skill: it.skills.includes("write") ? "write" : it.skills[0] }].concat(out.filter((x) => x.it.id !== it.id)).slice(0, out.length); }
+      return out;
     }
     if (mode === "mission") {
       const sk = MISSION[Math.min(2, missionStep())].skill;
@@ -692,7 +695,7 @@
   function updateBar() {
     if (R.boss) return bossUI.draw(R);
     let n = R.q.length, done = R.i;
-    if (R.mode === "blank") done = R.q.filter((it) => R.status[it.id] === "ok" || R.status[it.id] === "bad").length;
+    if (R.mode === "blank") done = R.q.filter((it) => R.status[it.id] === "ok" || R.status[it.id] === "bad" || (R.sheet && sheetVal(it))).length;
     const pg = $("#pg"); if (pg) pg.style.width = (done / n) * 100 + "%";
     const c = $("#cnt");
     if (c) c.textContent = R.mode === "blitz" ? "✔ " + R.hits : R.mode === "blank" ? done + " / " + n : Math.min(R.i + 1, n) + " / " + n;
@@ -905,8 +908,78 @@
     };
   }
   // --- Allgemeines: Schreiben ---
+  // --- Mehrere Antworten: ein Feld pro Antwort, jedes wird für sich geprüft (wie bei ANTON) ---
+  function renderGenMulti(q) {
+    const w = q.it.g.write, need = w.all, n = need.length;
+    $("#panel").innerHTML = `<div class="prompt"><small>Schreiben · ${n} Antworten</small><h2 id="wprompt">${esc(w.q)}</h2></div>${speakBtn(w.q)}
+      <form class="multi" id="mf" autocomplete="off">
+        ${need.map((_, k) => `<div class="mrow" id="mr${k}"><span class="mnum">${k + 1}</span><input id="${k ? "wi" + k : "wi"}" class="mi" type="text" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="${k < n - 1 ? "next" : "done"}" aria-label="Antwort ${k + 1}" placeholder="${k + 1}. Antwort"><span class="mmark" aria-hidden="true"></span></div>`).join("")}
+        <button class="btn" type="submit" id="ws">Prüfen</button>
+      </form><div id="fb"></div><div id="act"></div>`;
+    readAloud(w.q);
+    R.onPanel = sayHandler;
+    const ins = [...document.querySelectorAll("#mf .mi")];
+    setTimeout(() => { try { ins[0].focus({ preventScroll: true }); } catch (e) { /* */ } }, 60);
+    // alles in ein Feld geschrieben ("Nordsee und Ostsee")? Auf die freien Felder verteilen.
+    const spread = () => ins.forEach((inp) => {
+      if (inp.readOnly) return;
+      const parts = splitAnswers(inp.value, need);
+      const free = ins.filter((x) => x !== inp && !x.readOnly && !x.value.trim());
+      if (parts.length < 2 || free.length < parts.length - 1) return;
+      inp.value = parts[0];
+      parts.slice(1).forEach((v, i) => { free[i].value = v; });
+    });
+    // Enter springt ins nächste leere Feld; erst wenn alle voll sind, wird geprüft
+    ins.forEach((inp) => inp.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || R.lock) return;
+      spread();
+      const empty = ins.find((x) => !x.readOnly && !x.value.trim());
+      if (empty && empty !== inp) { e.preventDefault(); empty.focus(); }
+    }));
+    const mark = (k, cls, sym) => { const row = $("#mr" + k); row.classList.remove("ok", "bad"); if (cls) row.classList.add(cls); row.querySelector(".mmark").textContent = sym || ""; };
+    $("#mf").onsubmit = (e) => {
+      e.preventDefault();
+      if (R.lock) { if (R.waitNext) next(); return; }
+      spread();
+      const vals = ins.map((x) => x.value);
+      const empty = ins.filter((x) => !x.readOnly && !x.value.trim());
+      if (empty.length && !R.warned && !probe()) {
+        R.warned = true;
+        fb("hint", `Es ${empty.length === 1 ? "fehlt noch eine Antwort" : `fehlen noch ${empty.length} Antworten`}. Weißt du sie nicht? Dann tippe noch einmal auf Prüfen.`);
+        return empty[0].focus();
+      }
+      R.warned = false;
+      const j = judgeEach(vals, need);
+      j.fields.forEach((f, k) => { if (f.ok) { mark(k, "ok", "✓"); ins[k].readOnly = true; } else mark(k, "bad", "✗"); });
+      const notes = j.fields.map((f, k) => (f.ok && (f.kind === "typo" || f.kind === "spelling") ? diffHtml(vals[k], f.canonical) : "")).join("");
+      if (j.ok) {
+        R.lock = true;
+        fb("ok", pr() + (notes ? ` 👍<small>Kleiner Schreibtipp, so schreibt man es:</small>${notes}` : ""));
+        commit(q, R.attempt === 0 ? "first" : "second");
+        return later(next, notes ? 2400 : 1200);
+      }
+      R.attempt++;
+      const okN = j.fields.filter((f) => f.ok).length;
+      if (probe() || R.attempt >= 2) {
+        // Lösung in die roten Felder
+        R.lock = true; R.waitNext = true;
+        let mi = 0;
+        j.fields.forEach((f, k) => { if (!f.ok) { ins[k].readOnly = true; $("#mr" + k).insertAdjacentHTML("beforeend", `<span class="msol">${esc(j.missing[mi++] || "")}</span>`); } });
+        fb("bad", `${okN} von ${n} richtig. Richtig ist: ${esc(w.show)}`);
+        const ws = $("#ws"); ws.textContent = "Weiter"; ws.classList.add("next");
+        commit(q, "fail");
+        return;
+      }
+      tone("bad");
+      const dup = j.fields.some((f) => f.kind === "dup");
+      fb("hint", `${okN ? `${okN} von ${n} richtig, super!` : "Noch nicht richtig."}${dup ? " Eine Antwort steht doppelt da." : ""} Verbessere ${n - okN === 1 ? "das rote Feld" : "die roten Felder"}.`);
+      const bad = ins.find((x) => !x.readOnly);
+      if (bad) { bad.focus(); bad.select(); }
+    };
+  }
   function renderGenWrite(q) {
     const g = q.it.g, w = g.write;
+    if (w.all) return renderGenMulti(q);
     const inp = writeForm(esc(w.q), w.num ? "Zahl eintippen" : "Antwort eintippen");
     inp.setAttribute("autocapitalize", w.num ? "off" : "words");
     if (w.num) inp.setAttribute("inputmode", "numeric");
@@ -955,21 +1028,28 @@
     closeModal();
     const m = document.createElement("div");
     m.className = "modal";
+    const st = S.blankStyle === "single" ? "single" : "sheet";
     m.innerHTML = `<div class="card"><h2 style="color:var(--text)">Stumme Karte</h2><p class="muted">Auf der Karte stehen Nummern. Schreibe zu jeder Nummer den Namen, wie in der LZK.</p>
+      <div class="seg" role="group" aria-label="Wie möchtest du üben?"><button class="segbtn" data-act="bstyle" data-v="sheet" aria-pressed="${st === "sheet"}">📋 Ganzes Blatt</button><button class="segbtn" data-act="bstyle" data-v="single" aria-pressed="${st === "single"}">1️⃣ Nummer für Nummer</button></div>
+      <p class="muted bsthint">${st === "sheet" ? "Wie in der LZK: alle Nummern auf einmal ausfüllen, dann prüfen." : "Eine Nummer nach der anderen, mit Tipps."}</p>
       <div class="choose">${MAP_CATS.map((c) => `<button class="mode" data-act="blank" data-v="${c}"><b>${CATS[c].name}</b><span>${catItems(c).length} Nummern</span></button>`).join("")}</div>
       <button class="btn ghost" data-act="closemodal">Abbrechen</button></div>`;
     document.body.appendChild(m);
   }
-  function startBlank(cat, onlyIds) {
-    closeModal();
-    // Nummern wie im Lapbook (Gebirge, Gewässer), sonst von Nord nach Süd wie auf einem Arbeitsblatt
+  // Nummern wie im Lapbook (Gebirge, Gewässer), sonst von Nord nach Süd wie auf einem Arbeitsblatt
+  function blankSetup(cat, onlyIds) {
     const items = catItems(cat);
     const lapbook = items.every((it) => BLANK_NUM[it.id]);
     const nums = {};
     if (lapbook) items.forEach((it) => { nums[it.id] = BLANK_NUM[it.id]; });
     else items.slice().sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0]).forEach((it, i) => { nums[it.id] = i + 1; });
     const all = items.slice().sort((a, b) => nums[a.id] - nums[b.id]);
-    const ask = onlyIds ? all.filter((it) => onlyIds.includes(it.id)) : all;
+    return { lapbook, nums, all, ask: onlyIds ? all.filter((it) => onlyIds.includes(it.id)) : all };
+  }
+  function startBlank(cat, onlyIds) {
+    closeModal();
+    if (S.blankStyle !== "single") return startSheet(cat, onlyIds);
+    const { lapbook, nums, all, ask } = blankSetup(cat, onlyIds);
     view = "game";
     R = { tok: Math.random(), mode: "blank", cat, all, nums, q: ask, queue: ask.map((it) => it.id), status: {}, results: [], xp: 0, hits: 0, t0: Date.now(), i: 0, onlyIds };
     if (onlyIds) all.forEach((it) => { if (!onlyIds.includes(it.id)) R.status[it.id] = "known"; });
@@ -1014,10 +1094,12 @@
       const n = R.nums[it.id], st = R.status[it.id], cur = it.id === R.cur && !blankDone(it.id);
       const [x, y] = it.label;
       let s = `<g class="num ${cur ? "cur" : st || "open"}" data-num="${it.id}"><circle cx="${x}" cy="${y}" r="${cur ? 21 : 16}"/><text x="${x}" y="${y + 6}">${n}</text></g>`;
-      if (st === "ok" || st === "bad" || st === "known") { const [tx, ty] = textAt(it); s += `<text class="numlab ${st}" x="${tx}" y="${(LABEL_SHIFT[it.id] ? ty : y) + 36}">${esc(it.name)}</text>`; }
+      const [tx, ty] = textAt(it), ly = (LABEL_SHIFT[it.id] ? ty : y) + 36;
+      if (st === "ok" || st === "bad" || st === "known") s += `<text class="numlab ${st}" x="${tx}" y="${ly}">${esc(it.name)}</text>`;
+      else if (R.sheet) { const v = sheetVal(it); if (v) s += `<text class="numlab typed" x="${tx}" y="${ly}">${esc(v)}</text>`; }
       return s;
     }).join("");
-    $("#bgrid").innerHTML = R.all.map((it) => `<button class="nb-cell ${it.id === R.cur && !blankDone(it.id) ? "cur" : R.status[it.id] || "open"}" data-a="jump" data-id="${it.id}" ${blankDone(it.id) ? "disabled" : ""}>${R.nums[it.id]}</button>`).join("");
+    if ($("#bgrid")) $("#bgrid").innerHTML = R.all.map((it) => `<button class="nb-cell ${it.id === R.cur && !blankDone(it.id) ? "cur" : R.status[it.id] || "open"}" data-a="jump" data-id="${it.id}" ${blankDone(it.id) ? "disabled" : ""}>${R.nums[it.id]}</button>`).join("");
   }
   function renderBlankAnswer() {
     const bank = S.blankMode === "bank";
@@ -1077,6 +1159,150 @@
     fb("hint", wrongTip(it, j.kind));
     inp.select();
   }
+  /* ---------- Stumme Karte als ganzes Blatt: alle Nummern auf einmal, dann prüfen ---------- */
+  const sheetIn = (id) => $("#si-" + id);
+  const sheetVal = (it) => { const i = sheetIn(it.id); return i ? i.value.trim() : ""; };
+  function startSheet(cat, onlyIds) {
+    const { lapbook, nums, all, ask } = blankSetup(cat, onlyIds);
+    view = "game";
+    R = { tok: Math.random(), mode: "blank", sheet: true, cat, all, nums, q: ask, status: {}, results: [], xp: 0, hits: 0, combo: 0, t0: Date.now(), i: 0, onlyIds, attempt: 0, cur: null };
+    if (onlyIds) all.forEach((it) => { if (!onlyIds.includes(it.id)) R.status[it.id] = "known"; });
+    app.innerHTML = gameShell("blank");
+    wireGame();
+    $("#stage").classList.add("sheet");
+    const svg = $(".stage .map");
+    svg.classList.toggle("show-mtn", cat === "mountains");
+    svg.classList.add("focus", "blankmap");
+    $("#panel").innerHTML = `<div class="prompt"><small>Stumme Karte · Ganzes Blatt · ${CATS[cat].name}${lapbook ? " · Nummern wie im Lapbook" : ""}</small><h2>Schreibe zu jeder Nummer den Namen.</h2></div>
+      <div class="seg" role="group" aria-label="Antwortart"><button data-a="sm" data-v="write" class="segbtn" aria-pressed="false">✏️ Schreiben</button><button data-a="sm" data-v="bank" class="segbtn" aria-pressed="false">🔤 Wortkasten</button></div>
+      <div id="fb"></div>
+      <form class="sheetlist" id="sf" autocomplete="off">
+        <div class="srows">${ask.map((it) => `<div class="srow" id="sr-${it.id}"><button type="button" class="numbadge" data-a="srow" data-id="${it.id}" aria-label="Nummer ${nums[it.id]} auf der Karte zeigen">${nums[it.id]}</button><input id="si-${it.id}" data-id="${it.id}" type="text" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="next" aria-label="Nummer ${nums[it.id]}"><span class="smark" aria-hidden="true"></span></div>`).join("")}</div>
+        <div id="sbank"></div>
+        <div class="sfoot"><button class="btn" type="submit" id="ss">Prüfen</button></div>
+      </form>`;
+    R.onPanel = sheetPanel;
+    R.onMap = (e) => { const n = e.target.closest && e.target.closest("[data-num]"); if (n && sheetIn(n.dataset.num)) sheetIn(n.dataset.num).focus(); };
+    ask.forEach((it) => {
+      const inp = sheetIn(it.id);
+      inp.addEventListener("focus", () => sheetCur(it.id));
+      inp.addEventListener("input", () => { $("#sr-" + it.id).classList.remove("wrong"); drawNums(); updateBar(); });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sheetAdvance(it.id, true); } });
+    });
+    $("#sf").onsubmit = (e) => { e.preventDefault(); sheetCheck(); };
+    sheetMode();
+    R.cur = ask[0] && ask[0].id;
+    drawNums(); updateBar();
+    readAloud("Schreibe zu jeder Nummer den Namen.");
+  }
+  // gewählte Nummer: Gebiet leuchtet, Nummer pulsiert
+  function sheetCur(id) {
+    if (!R || !R.sheet) return;
+    R.cur = id;
+    clearHL(); highlight(BY_ID[id]);
+    document.querySelectorAll(".srow").forEach((r) => r.classList.toggle("cur", r.id === "sr-" + id));
+    drawNums();
+  }
+  // nächstes leeres Feld; sind alle voll, wird geprüft (Enter)
+  function sheetAdvance(fromId, checkWhenFull) {
+    const open = R.q.filter((it) => R.status[it.id] !== "ok" && R.status[it.id] !== "bad");
+    const k = open.findIndex((it) => it.id === fromId);
+    const order = open.slice(k + 1).concat(open.slice(0, Math.max(0, k)));
+    const next = order.find((it) => !sheetVal(it));
+    if (next) { sheetIn(next.id).focus(); sheetIn(next.id).scrollIntoView({ block: "nearest" }); return; }
+    if (checkWhenFull) sheetCheck();
+  }
+  // Schreiben oder Wortkasten (Wortkasten: keine Tastatur, Namen antippen)
+  function sheetMode() {
+    const bank = S.blankMode === "bank";
+    document.querySelectorAll('[data-a="sm"]').forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.v === "bank") === bank)));
+    R.q.forEach((it) => { const i = sheetIn(it.id); if (R.status[it.id] !== "ok" && R.status[it.id] !== "bad") i.readOnly = bank; i.inputMode = bank ? "none" : "text"; });
+    const words = R.all.slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
+    $("#sbank").innerHTML = bank ? `<div class="wordbank">${words.map((it) => `<button type="button" class="wchip" data-a="sword" data-name="${esc(it.name)}">${esc(it.name)}</button>`).join("")}</div>` : "";
+    sheetChips();
+  }
+  const sheetChips = () => {
+    const used = new Set(R.q.map((it) => sheetVal(it)).filter(Boolean));
+    document.querySelectorAll('[data-a="sword"]').forEach((c) => c.classList.toggle("used", used.has(c.dataset.name)));
+  };
+  function sheetRecord(it, res) {
+    const ok = res !== "fail", skill = S.blankMode === "bank" ? "choice" : "write";
+    record(it, skill, res);
+    const gain = (res === "first" ? 10 : res === "second" ? 5 : 0) + (ok && skill === "write" ? 5 : 0);
+    S.xp += gain; R.xp += gain;
+    if (ok) R.hits++;
+    R.results.push({ q: { it, skill }, res, ok });
+    return gain;
+  }
+  function sheetCheck() {
+    if (!R || !R.sheet) return;
+    if (R.lock) return R.waitNext ? finish() : undefined;
+    const rows = R.q.filter((it) => R.status[it.id] !== "ok");
+    const empty = rows.filter((it) => !sheetVal(it));
+    if (empty.length && !R.warned) {
+      R.warned = true;
+      fb("hint", `Noch ${empty.length} ${empty.length === 1 ? "Feld ist" : "Felder sind"} leer. Weißt du ${empty.length === 1 ? "es" : "sie"} nicht? Dann tippe noch einmal auf Prüfen.`);
+      sheetIn(empty[0].id).focus();
+      return;
+    }
+    R.warned = false;
+    R.attempt++;
+    const final = R.attempt >= 2;
+    let gain = 0;
+    const notes = [];
+    for (const it of rows) {
+      const inp = sheetIn(it.id), row = $("#sr-" + it.id), v = inp.value;
+      const j = judge(v, nameList(it), othersOf(it));
+      row.classList.remove("wrong", "bad");
+      if (j.ok) {
+        R.status[it.id] = "ok"; gain += sheetRecord(it, R.attempt === 1 ? "first" : "second");
+        row.classList.add("ok"); inp.readOnly = true; row.querySelector(".smark").textContent = "✓";
+        if (j.kind === "typo" || j.kind === "spelling") notes.push(`<b>${R.nums[it.id]}:</b>${diffHtml(v, j.canonical)}`);
+      } else if (final) {
+        R.status[it.id] = "bad"; sheetRecord(it, "fail");
+        row.classList.add("bad"); inp.readOnly = true; row.querySelector(".smark").textContent = "✗";
+        row.insertAdjacentHTML("beforeend", `<span class="ssol">${esc(it.name)}</span>`);
+      } else { row.classList.add("wrong"); row.querySelector(".smark").textContent = "✗"; }
+    }
+    const n = R.q.length, okN = R.q.filter((it) => R.status[it.id] === "ok").length;
+    clearHL(); drawNums(); updateBar(); save(); checkBadges();
+    if (gain) fx.plus($("#ss"), $("#xpv"), "+" + gain);
+    const tip = notes.length ? `<small>Kleiner Schreibtipp:</small>${notes.join("")}` : "";
+    if (okN === n) {
+      R.lock = true; R.waitNext = true;
+      fb("ok", `Alles richtig! 🎉${tip}`);
+      tone("win"); confetti(60);
+      $("#ss").textContent = "Zur Auswertung";
+      return;
+    }
+    if (final) {
+      R.lock = true; R.waitNext = true;
+      fb("bad", `${okN} von ${n} richtig. Bei den roten Nummern steht jetzt die Lösung.${tip}`);
+      tone("bad");
+      $("#ss").textContent = "Zur Auswertung";
+      return;
+    }
+    tone(okN ? "ok" : "bad");
+    fb("hint", `${okN} von ${n} richtig${okN ? ", super" : ""}! Verbessere die roten Felder und prüfe noch einmal.${tip}`);
+    const firstBad = R.q.find((it) => R.status[it.id] !== "ok");
+    if (firstBad) { sheetIn(firstBad.id).focus(); if (S.blankMode !== "bank") sheetIn(firstBad.id).select(); }
+  }
+  function sheetPanel(b) {
+    const a = b.dataset.a;
+    if (a === "sm") { S.blankMode = b.dataset.v; save(); sheetMode(); if (R.cur && sheetIn(R.cur)) sheetIn(R.cur).focus(); return; }
+    if (a === "srow") { const i = sheetIn(b.dataset.id); if (i) i.focus(); return; }
+    if (a === "sword") {
+      if (R.lock || !R.cur || R.status[R.cur] === "ok") return;
+      const i = sheetIn(R.cur);
+      // den Namen aus einem anderen (noch offenen) Feld wegnehmen: jeder Name nur einmal
+      R.q.forEach((it) => { const o = sheetIn(it.id); if (o !== i && R.status[it.id] !== "ok" && o.value === b.dataset.name) o.value = ""; });
+      i.value = b.dataset.name;
+      $("#sr-" + R.cur).classList.remove("wrong");
+      sheetChips(); drawNums(); updateBar();
+      sheetAdvance(R.cur, false);
+    }
+  }
+
   function blankPanel(b) {
     const a = b.dataset.a;
     if (a === "bm") { S.blankMode = b.dataset.v; save(); if (!R.lock) renderBlankAnswer(); else document.querySelectorAll(".segbtn").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.v === S.blankMode))); return; }
@@ -1285,6 +1511,7 @@
       case "mode": startRound(v); break;
       case "mission": if (missionStep() < 3) startRound("mission"); else go("home"); break;
       case "blankpick": blankChooser(); break;
+      case "bstyle": S.blankStyle = v === "single" ? "single" : "sheet"; save(); blankChooser(); break;
       case "blank": startBlank(v); break;
       case "blankwrong": startBlank(R.cat, R.q.filter((it) => R.status[it.id] === "bad").map((it) => it.id)); break;
       case "closemodal": closeModal(); break;
