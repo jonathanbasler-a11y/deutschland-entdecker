@@ -125,7 +125,8 @@ for (const [name, w, h] of DEVICES) {
   await p.click('[data-act="mode"][data-v="blitz"]');
   for (let i = 0; i < 30 && !(await p.$(".results")); i++) {
     // nicht warten: die Runde kann jederzeit enden
-    const nm = await p.$eval(".big", (e) => e.textContent).catch(() => null);
+    // nur der Name in der Aufgabe (auf der Startseite hat auch der Missions-Knopf die Klasse "big")
+    const nm = await p.$eval(".prompt .big", (e) => e.textContent).catch(() => null);
     if (!nm) break;
     const [x, y] = await anchor(await byName(nm)).catch(() => [0, 0]);
     await p.touchscreen.tap(x, y).catch(() => {});
