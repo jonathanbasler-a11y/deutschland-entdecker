@@ -1,6 +1,6 @@
 "use strict";
 (function () {
-  const { judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
+  const { judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, genOthers } = DELogic;
   const B = window.DEBegleiter;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
@@ -614,7 +614,16 @@
   /* ================= Spielrunden ================= */
   const nameList = (it) => [it.name].concat(it.alts);
   // Schreibfallen aus dem Lapbook kommen beim Schreiben öfter dran, bis sie sicher sitzen
-  const trap = (it, skill) => !!LAPBOOK_SPELLING[it.id] && it.skills.includes("write") && (skill === "write" || !skill) && lvl(it.id, "write") < 2;
+  const spellOpen = (it) => !!LAPBOOK_SPELLING[it.id] && (lvl(it.id, "write") < 2 || (S.items[it.id] && S.items[it.id].sp === false));
+  const trap = (it, skill) => it.skills.includes("write") && (skill === "write" || !skill) && spellOpen(it);
+  // Rechtschreibung zählt in der LZK nicht (nur erkennbar). Schreibfallen kommen trotzdem öfter dran,
+  // bis sie einmal richtig geschrieben sind. Erkannt, aber anders geschrieben: sp = false.
+  function noteSpelling(it, kinds) {
+    if (!LAPBOOK_SPELLING[it.id]) return;
+    const e = S.items[it.id] || (S.items[it.id] = {});
+    e.sp = !kinds.some((k) => k === "typo");
+  }
+  const noteTypo = (kinds) => { if (R && kinds.some((k) => k === "typo")) R.typos = (R.typos || 0) + 1; };
   const focus = (it) => FOCUS.includes(it.id) && stars(it) < it.skills.length;
   const weightFor = (skill) => (it) => 1 + (it.skills.length - stars(it)) * 1.5 + (lastWrong(it) ? 3 : 0) + (trap(it, skill) ? 3 : 0) + (focus(it) ? 8 : 0);
   const weight = weightFor(null);
@@ -867,6 +876,7 @@
   // gemeinsame Auswertung für Schreib-Aufgaben (target: Schreibweise für den Buchstaben-Vergleich)
   function finishWrite(q, j, inp, correct, reveal, tip, target) {
     if (target === undefined) target = correct;
+    if (j.ok) { noteSpelling(q.it, [j.kind]); noteTypo([j.kind]); }
     if (j.ok) {
       R.lock = true; inp.classList.add("ok");
       reveal();
@@ -949,7 +959,8 @@
         return empty[0].focus();
       }
       R.warned = false;
-      const j = judgeEach(vals, need);
+      const j = judgeEach(vals, need, genOthers(q.it.g));
+      if (j.ok) { noteSpelling(q.it, j.fields.map((f) => f.kind)); noteTypo(j.fields.map((f) => f.kind)); }
       j.fields.forEach((f, k) => { if (f.ok) { mark(k, "ok", "✓"); ins[k].readOnly = true; } else mark(k, "bad", "✗"); });
       const notes = j.fields.map((f, k) => (f.ok && (f.kind === "typo" || f.kind === "spelling") ? diffHtml(vals[k], f.canonical) : "")).join("");
       if (j.ok) {
@@ -987,7 +998,7 @@
     $("#wf").onsubmit = (e) => {
       e.preventDefault();
       if (R.lock) { if (R.waitNext) next(); return; }
-      const j = w.num ? judgeNumber(inp.value, w.num, w.show) : w.all ? judgeAll(inp.value, w.all) : judge(inp.value, w.answers);
+      const j = w.num ? judgeNumber(inp.value, w.num, w.show) : w.all ? judgeAll(inp.value, w.all) : judge(inp.value, w.answers, genOthers(g));
       if (j.kind === "empty") return inp.focus();
       const tip = j.kind === "partial" ? `Gut, ${esc(j.found.join(" und "))} stimmt! Es fehlt noch ${j.missing.length === 1 ? "eins" : j.missing.length}.` : "Nicht ganz. Überlege noch einmal.";
       finishWrite(q, j, inp, w.show, () => {}, tip, w.num ? null : w.all ? (j.ok ? j.canonical : null) : closest(inp.value, w.answers));
@@ -1147,6 +1158,7 @@
     const j = judge(inp.value, nameList(it), othersOf(it));
     if (j.kind === "empty") return inp.focus();
     if (j.ok) {
+      noteSpelling(it, [j.kind]);
       inp.classList.add("ok");
       const note = j.kind === "spelling" || j.kind === "typo" ? `<small>Kleiner Schreibtipp, so schreibt man es:</small>${diffHtml(inp.value, j.canonical)}` : j.kind === "case" ? `<small>Namen schreibt man groß: ${esc(j.canonical)}</small>` : "";
       return blankSolved(it, "write", note);
@@ -1255,6 +1267,7 @@
       const j = judge(v, nameList(it), othersOf(it));
       row.classList.remove("wrong", "bad");
       if (j.ok) {
+        noteSpelling(it, [j.kind]);
         R.status[it.id] = "ok"; gain += sheetRecord(it, R.attempt === 1 ? "first" : "second");
         row.classList.add("ok"); inp.readOnly = true; row.querySelector(".smark").textContent = "✓";
         if (j.kind === "typo" || j.kind === "spelling") notes.push(`<b>${R.nums[it.id]}:</b>${diffHtml(v, j.canonical)}`);
@@ -1369,7 +1382,7 @@
     buttons = restart + home;
     if (r.mode === "probe") {
       head = "Probe-LZK geschafft!"; big = "Note " + r.grade;
-      sub = `${r.ok} von ${r.n} richtig (${r.pct} %). Das ist nur eine Orientierung, nicht die Note der Lehrerin.`;
+      sub = `${r.ok} von ${r.n} richtig (${r.pct} %).${r.typos ? ` ${r.typos} Schreibfehler markiert, aber wie in der LZK nicht bewertet.` : ""} Das ist nur eine Orientierung, nicht die Note aus der Schule.`;
     } else if (r.mode === "blitz") {
       head = r.record ? "Neuer Rekord!" : "Zeit um!"; big = r.hits + " Treffer";
       sub = `${r.n - r.ok} daneben. Dein Rekord: ${S.blitzBest}.`;
@@ -1452,7 +1465,7 @@
       </section>
       <section class="card"><h2>Wackelt noch</h2>${never ? `<p class="muted" style="margin-bottom:8px">${never} von ${ITEMS.length} Begriffen wurden noch nie geübt.</p>` : ""}${weak.length ? `<table class="tbl"><thead><tr><th>Begriff</th><th>Sterne</th><th>Fehler</th><th>Fehlt noch</th></tr></thead><tbody>${weak.map((it) => `<tr><td>${esc(it.name)}</td><td>${"★".repeat(stars(it))}${"☆".repeat(it.skills.length - stars(it))}</td><td>${wrongs(it)}</td><td>${miss(it) || "–"}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Bisher wackelt nichts von dem, was schon geübt wurde.</p>`}</section>
       <section class="card"><h2>Schreibfallen aus dem Lapbook</h2><p class="muted" style="margin-bottom:8px">So stand es im Lapbook. Diese Wörter kommen beim Schreiben öfter dran, bis sie sicher sitzen.</p>
-        <table class="tbl"><thead><tr><th>Richtig</th><th>Im Lapbook</th><th>Schreiben</th></tr></thead><tbody>${Object.entries(LAPBOOK_SPELLING).map(([id, seen]) => { const it = BY_ID[id]; const l = lvl(id, "write"); const label = it.cat === "general" ? (it.g.write ? it.g.write.show : it.name) : it.name; return `<tr><td>${esc(label)}</td><td class="muted">${esc(seen)}</td><td class="${l >= 2 ? "yes" : "no"}">${l >= 2 ? "✓ sicher" : l === 1 ? "fast" : "–"}</td></tr>`; }).join("")}</tbody></table></section>
+        <table class="tbl"><thead><tr><th>Richtig</th><th>Im Lapbook</th><th>Schreiben</th></tr></thead><tbody>${Object.entries(LAPBOOK_SPELLING).map(([id, seen]) => { const it = BY_ID[id]; const l = lvl(id, "write"); const label = it.cat === "general" ? (it.g.write ? it.g.write.show : it.name) : it.name; return `<tr><td>${esc(label)}</td><td class="muted">${esc(seen)}</td>${(() => { const sp = S.items[id] && S.items[id].sp; return sp === false ? `<td class="no">erkannt, Schreibweise übt er noch</td>` : `<td class="${l >= 2 ? "yes" : "no"}">${l >= 2 ? "✓ sicher" : l === 1 ? "fast" : "–"}</td>`; })()}</tr>`; }).join("")}</tbody></table></section>
       <section class="card"><h2>Übungszeit, letzte 7 Tage</h2>
         <div class="days">${days.map((d) => { const m = S.mins[d] || 0; const dt = new Date(d + "T12:00:00"); return `<div class="day"><div class="col"><i style="height:${Math.round((m / maxMin) * 100)}%"></i></div><b>${Math.round(m)}</b><small>${wd[dt.getDay()]}</small></div>`; }).join("")}</div>
         <p class="muted">Minuten pro Tag. Insgesamt ${Math.round(totalMin)} Minuten, ${total()} Aufgaben, ${S.missionsDone || 0} Tagesmissionen, Serie ${streak()} ${streak() === 1 ? "Tag" : "Tage"}.</p>

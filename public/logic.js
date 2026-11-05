@@ -29,8 +29,22 @@
     return prev[n];
   }
 
-  // Rechtschreibung ist zweitrangig: so viele Tippfehler sind je nach Wortlänge erlaubt.
-  const tolerance = (len) => (len < 4 ? 0 : len < 8 ? 1 : len < 12 ? 2 : 3);
+  // Rechtschreibung zählt in der LZK nicht, der Begriff muss nur erkennbar sein.
+  // So viele Buchstaben dürfen je nach Wortlänge abweichen.
+  const tolerance = (len) => (len < 4 ? 0 : len < 6 ? 1 : len < 10 ? 2 : 3);
+
+  // Lautschlüssel: Schreibweisen, die gleich klingen, werden gleich ("Reien" = "Rhein", "Schweitz" = "Schweiz").
+  function sound(s) {
+    return norm(s)
+      .replace(/ph/g, "f").replace(/th/g, "t").replace(/rh/g, "r").replace(/dt/g, "t")
+      .replace(/chs|cks|x/g, "ks").replace(/ck/g, "k").replace(/qu/g, "kw")
+      .replace(/tz/g, "z").replace(/z/g, "ts").replace(/v/g, "f").replace(/y/g, "i")
+      .replace(/c(?!h)/g, "k")
+      .replace(/([aeiou])h/g, "$1")
+      .replace(/ie/g, "i").replace(/ey|ay|ai/g, "ei")
+      .replace(/(.)\1+/g, "$1")
+      .replace(/d(?=\d|$)/g, "t").replace(/g(?=\d|$)/g, "k").replace(/b(?=\d|$)/g, "p");
+  }
 
   // names[0] ist die richtige Schreibweise, der Rest sind erlaubte Varianten.
   // others: Namen anderer Begriffe; ein Tippfehler zählt nur, wenn er keinem anderen Begriff näher ist.
@@ -45,12 +59,20 @@
         return { ok: true, kind, canonical: name };
       }
     }
+    // klingt gleich -> erkannt (wenn kein anderer Begriff genauso klingt)
+    const sn = sound(raw), oth = others || [];
+    const sameSound = names.find((name) => sound(name) === sn);
+    if (sameSound && !oth.some((o) => sound(o) === sn)) return { ok: true, kind: "typo", canonical: sameSound };
+    // Abstand: das Kleinere aus Buchstaben- und Lautvergleich (Laut einen Schritt strenger,
+    // damit kurze Wörter wie "Main" nicht als "Rhein" durchgehen)
+    const dist = (name) => Math.min(lev(norm(name), n), lev(sound(name), sn) + 1);
     let best = null, bestD = Infinity;
     for (const name of names) {
-      const d = lev(norm(name), n);
+      const d = dist(name);
       if (d < bestD) { bestD = d; best = name; }
     }
-    const nearOther = (others || []).some((o) => lev(norm(o), n) <= bestD);
+    // ein Tippfehler zählt nur, wenn kein anderer Begriff genauso nah oder näher ist
+    const nearOther = oth.some((o) => dist(o) <= bestD);
     if (best && bestD <= tolerance(norm(best).length) && !nearOther) return { ok: true, kind: "typo", canonical: best };
     return { ok: false, kind: "wrong", canonical: names[0] };
   }
@@ -72,7 +94,7 @@
 
   // Mehrere Felder, je eine Antwort, Reihenfolge egal (wie bei ANTON). Jedes Feld wird für sich bewertet.
   // Feld: { ok, kind: exact | case | spelling | typo | wrong | dup (schon in einem anderen Feld) | empty, canonical }
-  function judgeEach(inputs, required) {
+  function judgeEach(inputs, required, others) {
     const left = required.slice();
     const fields = inputs.map((v) => (String(v || "").trim() ? null : { ok: false, kind: "empty" }));
     // erst genaue Treffer, dann kleine Schreibfehler (damit ein Tippfehler keinem anderen Feld die Antwort wegnimmt)
@@ -80,7 +102,7 @@
       inputs.forEach((v, k) => {
         if (fields[k]) return;
         for (const r of left) {
-          const j = judge(v, [r], required.filter((x) => x !== r));
+          const j = judge(v, [r], required.filter((x) => x !== r).concat(others || []));
           if (j.ok && (!strict || j.kind !== "typo")) { fields[k] = { ok: true, kind: j.kind, canonical: r }; left.splice(left.indexOf(r), 1); break; }
         }
       });
@@ -104,6 +126,16 @@
     return parts;
   }
 
+  // Vergleichsbegriffe für eine Allgemein-Frage: die anderen Auswahlantworten, in einzelne Antworten zerlegt.
+  // So zählt ein Schreibfehler nur, wenn er nicht genauso gut eine falsche Auswahlantwort sein könnte.
+  function genOthers(g) {
+    const right = (g.write && (g.write.answers || g.write.all)) || [];
+    const isRight = (x) => right.some((r) => norm(r) === norm(x));
+    const out = [];
+    (g.options || []).forEach((o) => String(o).split(/\s*(?:,|\bund\b)\s*/).filter(Boolean).forEach((x) => { if (!isRight(x) && !out.includes(x)) out.push(x); }));
+    return out;
+  }
+
   // "84", "84 Mio.", "84 Millionen", "84.000.000" -> in Millionen
   function judgeNumber(input, accepted, show) {
     const raw = String(input || "").trim();
@@ -118,7 +150,7 @@
     return { ok: false, kind: "wrong", canonical: show };
   }
 
-  // Grobe Orientierung, nicht die Note der Lehrerin.
+  // Grobe Orientierung, nicht die Note aus der Schule.
   function gradeFor(pct) {
     if (pct >= 90) return 1;
     if (pct >= 75) return 2;
@@ -180,7 +212,7 @@
     return names.slice().sort((x, y) => lev(norm(x), n) - lev(norm(y), n))[0];
   }
 
-  const api = { norm, lev, judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, tolerance };
+  const api = { genOthers, sound, norm, lev, judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, tolerance };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DELogic = api;
 })(typeof self !== "undefined" ? self : this);

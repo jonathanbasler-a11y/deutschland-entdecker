@@ -1,4 +1,4 @@
-// Lerninhalt der LZK "Deutschland". Alles, was die Lehrerin abfragt, steht hier.
+// Lerninhalt der LZK "Deutschland". Alles, was der Lehrer abfragt, steht hier.
 // ACHTUNG: Zahlen/Namen (Einwohner, Kanzler) bitte mit dem Lapbook abgleichen.
 const CATS = {
   states: { name: "Bundesländer", short: "Länder", ask: "Welches Bundesland ist markiert?" },

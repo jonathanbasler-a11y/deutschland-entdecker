@@ -66,7 +66,9 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   await p.reload();
   check(await p.$(".mhome"), "Fach bleibt nach Neuladen gewählt");
   check((await p.$$(".rung:not([disabled])")).length === 1, "Zu Beginn ist nur Stufe 1 offen");
-  check((await p.$$(".rung")).length === 8, "8 Stufen im Turm");
+  check((await p.$$(".rung")).length === 9, "9 Stufen im Turm (4 Teststufen + 5 Extras)");
+  check((await p.$$(".rung .tag")).length === 5 && !!(await p.$(".ladder-sep")), "Extra-Stufen sind markiert und abgesetzt");
+  check((await p.$$eval(".rung", (r) => r.slice(-4).map((x) => x.dataset.v).join(","))) === "stelle,z-mal,k-geteilt,k-mal", "Testpfad unten: 1×1 mal, 1×1 geteilt, Zehner/Hunderter, große Zahlen");
   await shot(p, "home");
   await p.tap('[data-act="m-level"][data-v="k-mal"]');
   check((await p.textContent("#cnt")) === "1 / 10", "Übungsrunde hat 10 Aufgaben");
@@ -273,17 +275,17 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   await p.selectOption("#m-tn", "30");
   await p.selectOption("#m-ts", "5");
   await p.selectOption("#m-tm", "sheet");
-  await p.uncheck("#m-gross");
+  await p.uncheck("#m-extras");
   await p.fill("#m-td", "2026-12-01");
   await p.dispatchEvent("#m-td", "change");
   await p.check("#m-calm");
   const s = await R(p, "window.__DE_M.M().set");
-  check(s.testN === 30 && s.testSec === 5 && s.testMode === "sheet" && s.gross === false && s.testDate === "2026-12-01", "Einstellungen gespeichert");
+  check(s.testN === 30 && s.testSec === 5 && s.testMode === "sheet" && s.extras === false && s.testDate === "2026-12-01", "Einstellungen gespeichert");
   check(await p.evaluate(() => document.body.classList.contains("calm")), "Ruhiger Modus aus dem Kopfrechnen-Teil");
   await p.click('.ptabs [data-v="de"]');
   check((await p.textContent(".parents")).includes("Bereit für die LZK"), "Reiter Deutschland zeigt die LZK-Übersicht");
   await p.click('[data-act="home"]');
-  check((await p.$$(".rung")).length === 7, "Zusatzstufe ausgeschaltet: 7 Stufen");
+  check((await p.$$(".rung")).length === 4 && !(await p.$(".ladder-sep")), "Extra-Stufen ausgeschaltet: nur die 4 Teststufen");
   check((await p.textContent(".chips")).includes("Test in"), "Startseite zählt die Tage bis zum Test");
   await p.reload();
   check((await R(p, "window.__DE_M.M().set.testN")) === 30, "Einstellungen überstehen Neuladen");
@@ -294,6 +296,52 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   await p.click('[data-act="m-reset"]');
   check((await R(p, "window.__DE_M.M().total")) === 0 && (await R(p, "!window.__DE.S.badges.m_start")), "Kopfrechnen zurückgesetzt");
   check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
+  await ctx.close();
+}
+
+// 7b) Wie der Kopfrechentest der Klasse: Blatt, 20 Aufgaben, 7 Minuten, gleiche Mischung; große Zahlen eintippen
+{
+  const { ctx, p } = await fresh(undefined, { sheetMs: 60000 });
+  await p.click('[data-act="subject"][data-v="math"]');
+  const s = await R(p, "window.__DE_M.M().set");
+  check(s.testMode === "sheet" && s.testN === 20 && s.sheetMin === 7 && s.testLevels === "schule", "Standard: Blatt, 20 Aufgaben, 7 Minuten, wie in der Klasse");
+  check((await p.textContent('[data-act="m-test"]')).includes("20 Aufgaben in 7 Minuten"), "Startseite: 20 Aufgaben in 7 Minuten");
+  await p.click('[data-act="m-test"]');
+  check((await p.$eval('[data-act="m-teststart"]', (b) => b.dataset.v)) === "sheet", "Test-Fenster: Blatt steht zuerst");
+  await p.click('[data-act="m-teststart"][data-v="sheet"]');
+  const q = await R(p, "window.__DE_M.R.q.map((x) => x.t)");
+  const lv = (id) => q.filter((t) => t.level === id).length;
+  check(q.length === 20 && lv("k-mal") === 9 && lv("z-mal") === 4 && lv("stelle") === 1 && lv("k-geteilt") === 6, "Mischung wie in der Klasse (9 · 1×1, 4 · Zehner/Hunderter, 1 · große Zahl, 6 · geteilt)");
+  // große Zahl: 6 Stellen eintippen, mit Tausenderpunkten angezeigt
+  const k = q.findIndex((t) => t.level === "stelle");
+  await p.evaluate((k) => { const r = window.__DE_M.R; r.q[k].t = window.__DE_M.RL.task("stelle", 200000, "+", 20000); document.querySelector("#sc" + k + " .sq").textContent = window.__DE_M.RL.show(r.q[k].t) + " ="; }, k);
+  await p.tap("#sc" + k);
+  for (const d of "220000") await p.tap(`.key[data-v="${d}"]`);
+  check((await p.textContent("#sa" + k)) === "220.000", "6 Stellen eingetippt, angezeigt als 220.000");
+  check((await p.textContent("#sc" + k + " .sq")).includes("200.000 + 20.000"), "Aufgabe mit Tausenderpunkten wie auf dem Blatt");
+  await p.click('[data-act="m-hand"]');
+  await p.waitForSelector(".mresults");
+  check((await p.textContent(".sgrid.done")).includes("220.000"), "Auswertung zeigt 220.000");
+  check(await p.evaluate((k) => window.__DE_M.R.results[k].ok, k), "Große Zahl richtig gewertet");
+  check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
+  await ctx.close();
+}
+// 7c) Alte Einstellungen (Version 1) werden einmalig auf den echten Test umgestellt
+{
+  const ctx = await b.newContext({ viewport: { width: 1180, height: 820 }, hasTouch: true, serviceWorkers: "block" });
+  await ctx.addInitScript(() => { if (!sessionStorage.getItem("x")) { sessionStorage.setItem("x", "1"); localStorage.setItem("deutschland-entdecker-v1", JSON.stringify({ askedName: true, subject: "math", math: { xp: 90, lv: { "k-mal": { recent: [], stars: 2, n: 30 } }, set: { roundLen: 5, gross: false, testMode: "ansage", testN: 20, sheetMin: 5, testLevels: "auto", testDate: "2026-11-20" } } })); } });
+  const p = await ctx.newPage();
+  await p.goto(url);
+  await p.waitForSelector(".mhome");
+  const m = await R(p, "window.__DE_M.M()");
+  check(m.set.v === 2 && m.set.testMode === "sheet" && m.set.sheetMin === 7 && m.set.testLevels === "schule", "Version 1 -> Blatt, 7 Minuten, wie in der Klasse");
+  check(m.set.roundLen === 5 && m.set.testDate === "2026-11-20" && m.set.extras === false && m.lv["k-mal"].stars === 2 && m.xp === 90, "eigene Einstellungen, Sterne und Punkte bleiben; Zusatzstufe aus -> Extras aus");
+  // spätere Wahl bleibt (nicht bei jedem Start zurückgestellt)
+  await p.click('[data-act="m-test"]');
+  await p.click('[data-act="m-teststart"][data-v="ansage"]');
+  await p.click('[data-act="m-quit"]');
+  await p.reload(); await p.waitForSelector(".mhome");
+  check((await R(p, "window.__DE_M.M().set.testMode")) === "ansage", "Umstellung nur einmal: spätere Wahl bleibt");
   await ctx.close();
 }
 
@@ -317,7 +365,7 @@ for (const [name, w, h] of DEVICES) {
   if (shots && /Handy|Air/.test(name)) await shot(p, name.replace(/\s+/g, "-") + "-task");
   await p.click('[data-act="m-quit"]');
   // ungünstigster Fall: 40 Aufgaben mit allen Stufen, jedes Feld mit dem vollen Ergebnis gefüllt
-  await setM(p, { testN: 40, testLevels: "all8" });
+  await setM(p, { testN: 40, testLevels: "all" });
   await p.click('[data-act="m-test"]');
   await p.click('[data-act="m-teststart"][data-v="sheet"]');
   check(await inView(".spad .key"), `${name}: Blatt: Ziffernblock sichtbar`);

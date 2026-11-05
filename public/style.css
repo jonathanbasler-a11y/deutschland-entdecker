@@ -569,3 +569,7 @@ body.calm .project .newblock { animation: none; opacity: 0; }
   .stage.sheet .panel { order: 0; max-height: none; overflow: visible; }
   .sfoot { bottom: 0; }
 }
+
+/* Rechen-Turm: Trennlinie zwischen Testpfad und Extra-Stufen */
+.ladder .ladder-sep { list-style: none; margin: 6px 0 2px; padding: 6px 4px; border-top: 2px dashed var(--line); color: var(--muted); font-size: .82rem; font-weight: 700; }
+.tag { white-space: nowrap; }

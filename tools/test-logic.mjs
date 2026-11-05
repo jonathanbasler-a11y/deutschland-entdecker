@@ -29,9 +29,20 @@ assert.ok(typo("nidersachsen", ["Niedersachsen"]));
 assert.ok(typo("Badenwürtten Berg", ["Baden-Württemberg"]));
 assert.ok(typo("martz 2029", ["März 2029"]));
 assert.equal(j("weser", ["Weser"]).kind, "case");
-// zu weit weg bleibt falsch
-assert.equal(j("Luchsenburg", ["Luxemburg"]).ok, false);
-assert.equal(j("Reien", ["Rhein"]).ok, false);
+// Lehrer: Rechtschreibung zählt nicht, erkennbar genügt (so klingt es gleich oder fast gleich)
+assert.ok(typo("Luchsenburg", ["Luxemburg"]));
+assert.ok(typo("Reien", ["Rhein"]));
+assert.ok(typo("Bertien", ["Berlin"]));
+assert.ok(typo("Nidersaksen", ["Niedersachsen"]));
+assert.ok(typo("Tühringen", ["Thüringen"]));
+assert.ok(typo("Mekelnburg-Forpomern", ["Mecklenburg-Vorpommern"]));
+assert.ok(typo("Hamburk", ["Hamburg"]));
+assert.equal(L.sound("Schweitz"), L.sound("Schweiz"));
+assert.equal(L.sound("Reien"), L.sound("Rhein"));
+// zu weit weg oder ein anderer Begriff bleibt falsch
+assert.equal(j("Main", ["Rhein"], ["Main"]).ok, false);
+assert.equal(j("Sachsen", ["Sachsen-Anhalt"], ["Sachsen"]).ok, false);
+assert.equal(j("Frank walter", ["Steinmeier", "Frank-Walter Steinmeier"]).ok, false);
 assert.equal(j("Hamburg", ["Bremen"]).kind, "wrong");
 assert.equal(j("Rhein", ["Donau"]).kind, "wrong");
 assert.equal(j("Rot", ["Rom"]).kind, "wrong");
@@ -119,4 +130,41 @@ let hard = 0;
 for (let k = 0; k < 500; k++) hard += L.sample(list, 5, (x) => (x < 5 ? 10 : 1)).filter((x) => x < 5).length;
 assert.ok(hard / 500 > 3, "schwere Begriffe werden bevorzugt, Mittel " + hard / 500);
 assert.equal(L.shuffle([1, 2, 3, 4]).length, 4);
+// Vergleichsbegriffe für Allgemein-Fragen: die falschen Auswahlantworten, in Wörter zerlegt
+assert.deepEqual(L.genOthers({ options: ["Hamburg", "München", "Berlin", "Bonn"], correct: 2, write: { answers: ["Berlin"] } }), ["Hamburg", "München", "Bonn"]);
+assert.deepEqual(L.genOthers({ options: ["Nordsee und Ostsee", "Nordsee und Mittelmeer", "Ostsee und Schwarzes Meer"], correct: 0, write: { all: ["Nordsee", "Ostsee"] } }), ["Mittelmeer", "Schwarzes Meer"]);
+// Verwechslungstest über alle Begriffe der App: kein Name gilt als richtige Antwort für einen anderen Begriff
+{
+  const fs = await import("node:fs"), vm = await import("node:vm");
+  const ctx = { console };
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(new URL("../public/mapdata.js", import.meta.url), "utf8") + "\n" + fs.readFileSync(new URL("../public/content.js", import.meta.url), "utf8") + "\nthis.ITEMS = ITEMS; this.SPELL = LAPBOOK_SPELLING; this.BY_ID = BY_ID;", ctx);
+  const ITEMS = ctx.ITEMS, names = (it) => [it.name].concat(it.alts || []);
+  const terms = ITEMS.filter((it) => it.cat !== "general").flatMap(names);
+  let pairs = 0;
+  for (const a of ITEMS.filter((it) => it.cat !== "general")) {
+    for (const b of ITEMS.filter((it) => it.cat !== "general" && it.id !== a.id)) {
+      const others = ITEMS.filter((x) => x.cat === b.cat && x.id !== b.id).flatMap(names);
+      for (const nm of names(a)) {
+        pairs++;
+        // gleiche Kategorie: mit den anderen Begriffen als Vergleich (wie in der App)
+        if (a.cat === b.cat) assert.equal(L.judge(nm, names(b), others).ok, false, `${nm} darf nicht als ${b.name} gelten`);
+        // über alle Begriffe hinweg (wie bei den Allgemein-Fragen)
+        assert.equal(L.judge(nm, names(b), terms.filter((t) => !names(b).includes(t))).ok, false, `${nm} darf nicht als ${b.name} gelten (alle Begriffe)`);
+      }
+    }
+  }
+  assert.ok(pairs > 2500, "Paare geprüft: " + pairs);
+  // die echten Schreibfehler aus dem Lapbook werden erkannt (außer: falscher Begriff oder Nachname fehlt)
+  const notMeant = ["g_meere", "g_praesident"];
+  for (const [id, seen] of Object.entries(ctx.SPELL)) {
+    if (notMeant.includes(id)) continue;
+    const it = ctx.BY_ID[id], typed = seen.replace(/\s*\(.*\)\s*$/, "");
+    const want = it.cat === "general" ? (it.g.write.answers || it.g.write.all) : names(it);
+    // Allgemein-Fragen: verglichen wird mit den anderen Auswahlantworten derselben Frage (wie in der App)
+    const others = it.cat === "general" ? L.genOthers(it.g) : ITEMS.filter((x) => x.cat === it.cat && x.id !== it.id).flatMap(names);
+    assert.ok(L.judge(typed, want, others).ok, `Lapbook-Schreibweise „${typed}“ wird als ${want[0]} erkannt`);
+  }
+}
+
 console.log("logic ok");
