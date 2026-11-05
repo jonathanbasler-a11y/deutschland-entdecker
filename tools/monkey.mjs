@@ -84,7 +84,11 @@ for (const [name, w, h] of DEVICES) {
   if (!ok) fails++;
   console.log(ok ? "ok  " : "FAIL", `${name}: ${steps + 1} Schritte, Punkte ${st.xp}, Rechenaufgaben ${st.m}, Blöcke ${st.blocks}`);
   errs.slice(0, 3).forEach((e) => console.log("     ", e));
-  if (!ok) { await p.screenshot({ path: path.resolve(`monkey-${name.replace(/\s+/g, "-")}.png`) }).catch(() => {}); console.log("      letzte Schritte:", log.slice(-8).join(" > ")); }
+  if (!ok) {
+    // Bild nur speichern, wenn ein Ordner angegeben ist: MONKEY_SHOTS=/pfad node tools/monkey.mjs
+    if (process.env.MONKEY_SHOTS) await p.screenshot({ path: path.join(process.env.MONKEY_SHOTS, `monkey-${name.replace(/\s+/g, "-")}.png`) }).catch(() => {});
+    console.log("      letzte Schritte:", log.slice(-8).join(" > "));
+  }
   await ctx.close();
 }
 await b.close(); srv.close();
