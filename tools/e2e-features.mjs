@@ -110,7 +110,7 @@ async function playRound(p, max = 30) {
 // 2) Stumme Karte: Schreiben, Fehler, Überspringen, Wortkasten, Fehler nochmal
 {
   const { ctx, p } = await fresh();
-  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blankpick"]'); await p.click('[data-act="bstyle"][data-v="single"]');
   await p.click('[data-act="blank"][data-v="states"]');
   check((await p.$$(".map .num")).length === 16, "16 Nummern auf der Karte");
   check((await p.textContent("#bnum")) === "Nummer 1", "Beginnt mit Nummer 1");
@@ -175,7 +175,7 @@ async function playRound(p, max = 30) {
 {
   const { ctx, p } = await fresh();
   for (const cat of ["neighbors", "water", "mountains"]) {
-    await p.click('[data-act="blankpick"]');
+    await p.click('[data-act="blankpick"]'); await p.click('[data-act="bstyle"][data-v="single"]');
     await p.click(`[data-act="blank"][data-v="${cat}"]`);
     const n = await p.$$eval(".map .num", (e) => e.length);
     for (let i = 0; i < n + 2 && !(await p.$(".results")); i++) {
@@ -196,19 +196,19 @@ async function playRound(p, max = 30) {
 // 3b) Lapbook: Nummern wie im Lapbook, Buchstaben-Vergleich bei Schreibfehlern
 {
   const { ctx, p } = await fresh();
-  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blankpick"]'); await p.click('[data-act="bstyle"][data-v="single"]');
   await p.click('[data-act="blank"][data-v="water"]');
   check((await p.$eval("#panel", (e) => e.dataset.cur)) === "w_rhein" && (await p.textContent("#bnum")) === "Nummer 1", "Gewässer: Nummer 1 ist der Rhein (wie im Lapbook)");
   check((await p.$$eval("#bgrid .nb-cell", (e) => e.map((x) => x.textContent).join(","))) === "1,2,3,4,5,6,7,8,9,10,11,12", "Gewässer-Nummern wie im Lapbook (1 Rhein bis 10 Starnberger See, 11/12 Meere)");
   check((await p.textContent(".prompt small")).includes("wie im Lapbook"), "Hinweis: Nummern wie im Lapbook");
   await p.click('[data-act="quit"]');
-  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blankpick"]'); await p.click('[data-act="bstyle"][data-v="single"]');
   await p.click('[data-act="blank"][data-v="mountains"]');
   check((await p.$$eval("#bgrid .nb-cell", (e) => e.map((x) => x.textContent).join(","))) === "1,2,3,4,5,6,7,8,9,10,11", "Gebirge-Nummern wie im Lapbook (1 bis 10, 11 Zugspitze)");
   check((await p.$eval("#panel", (e) => e.dataset.cur)) === "m_bayerwald", "Gebirge: Nummer 1 ist der Bayerische Wald");
   await p.click('[data-act="quit"]');
   // Nachbarländer: Nummer 1 ist Dänemark; „Denemark“ wie im Lapbook
-  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blankpick"]'); await p.click('[data-act="bstyle"][data-v="single"]');
   await p.click('[data-act="blank"][data-v="neighbors"]');
   check((await p.$eval("#panel", (e) => e.dataset.cur)) === "n_dk", "Nachbarländer: Nummer 1 ist Dänemark");
   await p.fill("#bi", "Denemark"); await p.press("#bi", "Enter");
@@ -228,20 +228,19 @@ async function playRound(p, max = 30) {
   check(!!(await p.$(".feedback.ok")), "„Mertz“ zählt als richtig");
   check((await p.$$eval(".diff del", (e) => e.map((x) => x.textContent).join(""))) === "t", "Vergleich streicht das t in Mertz");
   await p.click('[data-act="quit"]');
-  // Meere: beide Antworten, Teilantwort wird freundlich ergänzt
+  // Meere: ein Feld pro Meer, jedes Feld wird für sich geprüft
   await p.evaluate(() => { window.__DE_TEST.forceFirst = "g_meere"; });
   await p.click('[data-act="mode"][data-v="write"]');
-  check((await p.textContent("#wprompt")).includes("Meere"), "Schreibfrage Meere");
-  await p.fill("#wi", "Österreich"); await p.press("#wi", "Enter");
-  check((await p.textContent("#fb")).includes("Nicht ganz"), "„Österreich“ ist kein Meer");
-  await p.fill("#wi", "Nordsee"); await p.press("#wi", "Enter");
-  check((await p.textContent("#fb")).includes("Richtig ist: Nordsee und Ostsee"), "Nach zwei Versuchen: Nordsee und Ostsee");
+  check((await p.textContent("#wprompt")).includes("Meere") && (await p.$$("#mf .mi")).length === 2, "Schreibfrage Meere mit zwei Feldern");
+  await p.fill("#wi", "Österreich"); await p.fill("#wi1", "Nordsee"); await p.click("#ws");
+  check(!!(await p.$("#mr0.bad")) && !!(await p.$("#mr1.ok")), "„Österreich“ ist kein Meer, Nordsee stimmt");
+  check((await p.textContent("#fb")).includes("1 von 2 richtig"), "Nur Nordsee richtig: 1 von 2");
+  await p.fill("#wi", "Schwarzes Meer"); await p.click("#ws");
+  check((await p.textContent("#fb")).includes("Richtig ist: Nordsee und Ostsee") && (await p.textContent("#mr0 .msol")) === "Ostsee", "Nach zwei Versuchen: Ostsee steht beim roten Feld");
   await p.click('[data-act="quit"]');
   await p.click('[data-act="mode"][data-v="write"]');
-  await p.fill("#wi", "Nordsee"); await p.press("#wi", "Enter");
-  check((await p.textContent("#fb")).includes("Es fehlt noch eins"), "Nur Nordsee: es fehlt noch eins");
   await p.fill("#wi", "Nordsee und Ostsee"); await p.press("#wi", "Enter");
-  check(!!(await p.$(".feedback.ok")), "Nordsee und Ostsee ist richtig");
+  check(!!(await p.$(".feedback.ok")) && (await p.inputValue("#wi1")) === "Ostsee", "Beide in ein Feld geschrieben: wird verteilt und ist richtig");
   await p.click('[data-act="quit"]');
   // Wahl: März 2029
   await p.evaluate(() => { window.__DE_TEST.forceFirst = "g_wahl"; });
@@ -353,7 +352,7 @@ async function playRound(p, max = 30) {
 // 5) Hochformat iPad: stumme Karte und Eltern-Übersicht ohne seitliches Scrollen
 {
   const { ctx, p } = await fresh({ width: 820, height: 1180 });
-  await p.click('[data-act="blankpick"]');
+  await p.click('[data-act="blankpick"]'); await p.click('[data-act="bstyle"][data-v="single"]');
   await p.click('[data-act="blank"][data-v="states"]');
   check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Stumme Karte hochkant: kein seitliches Scrollen");
   await shot(p, "blank-portrait");
