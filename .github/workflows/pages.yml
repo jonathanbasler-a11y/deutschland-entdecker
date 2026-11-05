@@ -35,6 +35,8 @@ jobs:
         run: node tools/e2e-features.mjs
       - name: Kopfrechnen
         run: node tools/e2e-rechnen.mjs
+      - name: Begleiter, Boss, Rennen
+        run: node tools/e2e-begleiter.mjs
       - name: iPad-Größen
         run: node tools/e2e-devices.mjs chromium
       - name: Offline

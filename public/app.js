@@ -1,6 +1,7 @@
 "use strict";
 (function () {
   const { judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
+  const B = window.DEBegleiter;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
   const TEST = window.__DE_TEST || {};
@@ -13,6 +14,8 @@
     roundLen: 8, calm: false, autoRead: false, showBlitz: true, lzkDate: LZK_DATE,
     mission: { day: "", step: 0 }, missionsDone: 0, blankMode: "write", ui: { more: false },
     subject: "de", // gewähltes Fach: "de" (Deutschland) oder eines aus DE_FAECHER
+    // Begleiter-Hund (für alle Fächer), Boss-Kämpfe, Geister-Lauf der Blitzrunde
+    pet: { name: "Pixel", blocks: 0, bosses: {}, lastGreet: "", petted: 0, stage: 0, gear: 0 }, bossOn: true, blitzTrace: [],
   });
   let S = defaults();
   try { const raw = JSON.parse(localStorage.getItem(KEY) || "null"); if (raw) S = Object.assign(defaults(), raw); } catch (e) { /* ohne Speicher weiter */ }
@@ -96,6 +99,7 @@
   ];
   const allBadges = () => BADGES.concat(...FAECH.map((f) => f.badges || []));
   function checkBadges() {
+    petCheck();
     for (const b of allBadges()) {
       if (!S.badges[b.id] && b.ok()) {
         S.badges[b.id] = dayKey();
@@ -109,22 +113,31 @@
 
   /* ================= Ton, Sprache, Konfetti ================= */
   let ac;
-  function tone(kind) {
+  // [Frequenz, Start, Wellenform, Endfrequenz]
+  const TONES = {
+    ok: [[660, 0], [880, 0.09]], bad: [[220, 0, "triangle"], [180, 0.1, "triangle"]], win: [[523, 0], [659, 0.1], [784, 0.2], [1047, 0.3]],
+    wuff: [[560, 0, "sawtooth", 260], [500, 0.14, "sawtooth", 240]], hit: [[180, 0, "square", 55], [90, 0.05, "triangle", 40]],
+    boss: [[196, 0, "triangle"], [185, 0.16, "triangle"], [147, 0.32, "triangle"]], pass: [[784, 0], [988, 0.08], [1319, 0.16]],
+  };
+  // combo: jede richtige Antwort in Folge einen Halbton höher (bis eine Oktave)
+  function tone(kind, combo) {
+    const mult = kind === "ok" && combo > 1 ? Math.pow(2, Math.min(12, combo - 1) / 12) : 1;
+    window.__DE_TONE = { kind, mult };
     if (!S.sound) return;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       if (ac.state === "suspended") ac.resume();
-      const seq = { ok: [[660, 0], [880, 0.09]], bad: [[220, 0], [180, 0.1]], win: [[523, 0], [659, 0.1], [784, 0.2], [1047, 0.3]] }[kind];
-      const vol = S.calm ? 0.08 : 0.18;
-      for (const [f, t] of seq) {
-        const o = ac.createOscillator(), g = ac.createGain();
-        o.type = kind === "bad" ? "triangle" : "sine";
-        o.frequency.value = f;
-        g.gain.setValueAtTime(0.0001, ac.currentTime + t);
-        g.gain.exponentialRampToValueAtTime(vol, ac.currentTime + t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.22);
+      const vol = S.calm ? 0.08 : kind === "wuff" || kind === "hit" ? 0.12 : 0.18;
+      for (const [f, t, type, f2] of TONES[kind]) {
+        const o = ac.createOscillator(), g = ac.createGain(), now = ac.currentTime + t;
+        o.type = type || "sine";
+        o.frequency.setValueAtTime(f * mult, now);
+        if (f2) o.frequency.exponentialRampToValueAtTime(f2, now + 0.12);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(vol, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
         o.connect(g); g.connect(ac.destination);
-        o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.25);
+        o.start(now); o.stop(now + 0.25);
       }
     } catch (e) { /* kein Ton */ }
   }
@@ -152,12 +165,39 @@
     parts = parts.filter((p) => p.life-- > 0);
     for (const p of parts) {
       p.x += p.vx; p.y += p.vy; p.vy += 0.45; p.vx *= 0.99; p.r += p.vr;
-      g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.globalAlpha = Math.min(1, p.life / 30);
-      g.fillRect(-p.s / 2, -p.s / 3, p.s, p.s / 1.6); g.restore();
+      g.save(); g.translate(p.x, p.y); if (!p.sq) g.rotate(p.r); g.fillStyle = p.c; g.globalAlpha = Math.min(1, p.life / 30);
+      if (p.sq) g.fillRect(Math.round(-p.s / 2), Math.round(-p.s / 2), p.s, p.s); else g.fillRect(-p.s / 2, -p.s / 3, p.s, p.s / 1.6);
+      g.restore();
     }
     raf = parts.length ? requestAnimationFrame(stepConfetti) : 0;
     if (!raf) g.clearRect(0, 0, cv.width, cv.height);
   }
+  const quiet = () => S.calm || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fx = {
+    // eckige Splitter in Blockfarben an einer Stelle des Bildschirms
+    burst(x, y, n = 14, cols) {
+      if (quiet()) return;
+      if (cv.width !== innerWidth) { cv.width = innerWidth; cv.height = innerHeight; }
+      cols = cols || ["#5aa64a", "#8a5a2b", "#ffd23f", "#8d9196", "#bfeaff", "#c47f3c"];
+      for (let i = 0; i < n; i++) parts.push({ sq: true, x, y, vx: (Math.random() - 0.5) * 9, vy: -Math.random() * 8 - 2, s: 5 + Math.round(Math.random() * 4), c: cols[i % cols.length], r: 0, vr: 0, life: 40 + Math.random() * 20 });
+      if (!raf) raf = requestAnimationFrame(stepConfetti);
+    },
+    burstAt(el, n, cols) { if (!el) return; const r = el.getBoundingClientRect(); fx.burst(r.left + r.width / 2, r.top + r.height / 2, n, cols); },
+    // "+10" fliegt vom Antwortfeld zur Punktezahl
+    plus(from, to, text) {
+      if (quiet() || !from || !to || !from.getBoundingClientRect) return;
+      const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+      const el = document.createElement("div");
+      el.className = "flyplus"; el.textContent = text;
+      el.style.left = a.left + a.width / 2 + "px"; el.style.top = a.top + "px";
+      document.body.appendChild(el);
+      const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top - a.top;
+      try {
+        el.animate([{ transform: "translate(-50%, 0) scale(1)", opacity: 1 }, { transform: "translate(-50%, -24px) scale(1.25)", opacity: 1, offset: 0.35 }, { transform: `translate(calc(-50% + ${dx}px), ${dy}px) scale(.6)`, opacity: 0.2 }], { duration: 800, easing: "ease-in" }).onfinish = () => el.remove();
+      } catch (e) { setTimeout(() => el.remove(), 800); }
+    },
+  };
+
   let toastT;
   function toast(msg) {
     document.querySelectorAll(".toast").forEach((t) => t.remove());
@@ -244,6 +284,147 @@
     root.querySelectorAll(".river").forEach((el, i) => { const it = BY_ID["w_" + MAP.water.filter((w) => w.kind === "Fluss")[i].id]; el.style.strokeWidth = 2.2 + stars(it) * 1.6; });
   }
 
+  /* ================= Begleiter: Pixel-Hund, Bauprojekte ================= */
+  const pet = () => S.pet || (S.pet = defaults().pet);
+  // Futter = Punkte aus allen Fächern zusammen
+  const totalXp = () => S.xp + FAECH.reduce((a, f) => a + (f.xp ? f.xp() : 0), 0);
+  // Hund gewachsen oder neue Ausrüstung? Einmal feiern.
+  function petCheck() {
+    const p = pet(), xp = totalXp(), st = B.stageOf(xp), gear = B.gearOf(xp).length;
+    if (st > (p.stage || 0)) { p.stage = st; p.gear = Math.max(p.gear || 0, gear); save(); toast(`🐶 ${p.name} ist gewachsen: ${B.STAGES[st].name}!`); confetti(90); tone("wuff"); return; }
+    if (gear > (p.gear || 0)) { p.gear = gear; save(); toast(`🎁 ${p.name} hat etwas Neues: ${B.GEAR[gear - 1].name}!`); confetti(60); tone("win"); }
+  }
+  // Blöcke für die Bauprojekte; gibt zurück, was sich getan hat
+  function giveBlocks(n) {
+    const p = pet(), before = B.building(p.blocks || 0);
+    p.blocks = (p.blocks || 0) + n;
+    const after = B.building(p.blocks);
+    save();
+    const fin = after.done.length > before.done.length ? B.PROJECTS.find((x) => x.id === after.done[after.done.length - 1]) : null;
+    const where = after.cur ? `${after.cur.name}: ${after.placed} von ${after.cur.size}` : "Bonus-Blöcke";
+    return { n, fin, text: `🧱 +${n} ${n === 1 ? "Block" : "Blöcke"} (${where})${fin ? ` · 🏠 ${fin.name} fertig gebaut!` : ""}` };
+  }
+  function petWidget() {
+    const p = pet(), xp = totalXp(), g = B.growth(xp), happy = active(dayKey());
+    let bubble = "";
+    if (S.askedName && p.lastGreet !== dayKey()) { p.lastGreet = dayKey(); save(); bubble = `<span class="bubble">Wuff! Da bist du ja${S.name ? ", " + esc(S.name) : ""}!</span>`; }
+    else if (!happy) bubble = `<span class="bubble soft">Ich warte auf dich!</span>`;
+    return `<button class="petw ${happy ? "happy" : "wait"}" data-act="pet" aria-label="Mein Hund ${esc(p.name)}">${B.dog(xp)}<span class="pinfo"><b>${esc(p.name)}</b><small>${g.name}</small><span class="pbar"><i style="width:${g.pct}%"></i></span></span>${bubble}</button>`;
+  }
+  // kleiner Hund in der Leiste oben: hüpft, macht Salto, legt den Kopf schief
+  function petReact(kind) {
+    const d = $("#gdog");
+    if (!d) return;
+    if (S.calm && (kind === "flip" || kind === "attack")) kind = "hop";
+    d.classList.remove("hop", "flip", "tilt", "attack");
+    void d.offsetWidth;
+    d.classList.add(kind);
+  }
+  const gdog = () => `<span class="gdog" id="gdog">${B.dog(totalXp(), "run")}</span>`;
+
+  function renderPet() {
+    const p = pet(), xp = totalXp(), g = B.growth(xp), gear = B.gearOf(xp), bd = B.building(p.blocks || 0);
+    const GI = { scarf: "🧣", helm: "⛑️", torch: "🔥", cape: "🦸" };
+    const proj = bd.cur
+      ? `<h2>Bauprojekt: ${bd.cur.name}</h2><div class="build">${B.projectSvg(bd.cur, bd.placed)}${gear.includes("torch") ? B.torch() : ""}</div><p class="bstat"><b>${bd.placed} von ${bd.cur.size} Blöcken</b>${bd.done.length ? ` · Fertig: ${bd.done.map((id) => B.PROJECTS.find((x) => x.id === id).name).join(", ")}` : ""}</p>`
+      : `<h2>Alle Bauprojekte fertig! 🏆</h2><div class="build">${B.PROJECTS.map((x) => B.projectSvg(x, x.size, "small")).join("")}</div><p class="bstat"><b>Du bist Baumeister!</b> ${bd.bonus} Bonus-Blöcke</p>`;
+    app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein Hund</h1></div>
+      <section class="card petstage">
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp)}</button>
+        <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
+          <div class="pbar big"><i style="width:${g.pct}%"></i></div>
+          <p class="muted">${g.next ? `Noch ${g.need} Punkte, dann wird ${esc(p.name)} zum ${g.next}. Punkte gibt es in jedem Fach.` : "Ganz groß geworden!"}</p>
+          <p class="muted">Tippe auf ${esc(p.name)} zum Streicheln.</p>
+          <form class="rename" id="rnf" autocomplete="off"><input id="dogname" type="text" maxlength="14" value="${esc(p.name)}" aria-label="Name des Hundes" autocapitalize="words" autocorrect="off" spellcheck="false"><button class="btn ghost" type="submit">Umbenennen</button></form>
+        </div>
+      </section>
+      <section class="card"><h2>Ausrüstung</h2><div class="gear">${B.GEAR.map((x) => `<div class="gitem ${gear.includes(x.id) ? "got" : ""}"><span class="gi">${GI[x.id]}</span><b>${x.name}</b><small>${gear.includes(x.id) ? "freigeschaltet" : `ab ${x.xp} Punkten`}</small></div>`).join("")}</div></section>
+      <section class="card">${proj}<p class="muted">Blöcke bekommst du so: Etappe geschafft +3 · Boss besiegt +2 (großer Boss +3) · Runde geschafft +1 · neuer Rekord oder Probe +2</p></section>
+      <section class="card"><h2>Boss-Pokale</h2><div class="trophies">${B.BOSSES.map((b) => { const n = (p.bosses || {})[b.id] || 0; return `<div class="trophy ${n ? "got" : ""}">${B.bossSvg(b)}<b>${n ? b.name : "???"}</b><small>${n ? n + "× besiegt" : "noch nicht getroffen"}</small></div>`; }).join("")}</div></section>
+    </div>`;
+    $("#rnf").onsubmit = (e) => { e.preventDefault(); const v = ($("#dogname").value || "").trim(); if (v) { pet().name = v; save(); toast("🐶 Hallo " + v + "!"); renderPet(); } };
+  }
+  function petPet() {
+    const d = $("#bigdog");
+    if (!d) return;
+    pet().petted = (pet().petted || 0) + 1; save();
+    tone("wuff");
+    d.classList.remove("pat"); void d.offsetWidth; d.classList.add("pat");
+    for (let i = 0; i < 4; i++) {
+      const h = document.createElement("span");
+      h.className = "heart"; h.textContent = "❤";
+      h.style.left = 20 + Math.random() * 60 + "%"; h.style.animationDelay = i * 0.12 + "s";
+      d.appendChild(h);
+      setTimeout(() => h.remove(), 1600);
+    }
+  }
+
+  /* ================= Boss am Ende einer Etappe (für alle Fächer) ================= */
+  const bossOn = () => S.bossOn !== false;
+  const bossUI = {
+    // r.boss anlegen; die Aufgaben hängt das Fach selbst an
+    start(r, step) {
+      const def = B.bossFor(dayKey(), step), max = B.bossHp(step);
+      r.boss = { def, hp: max, max, step };
+      r.bossAt = r.q.length;
+      toast(`⚔️ Ein Boss erscheint: ${def.name}!`);
+      tone("boss");
+      bossUI.draw(r);
+      const bb = $("#bossbar"); if (bb && !quiet()) bb.classList.add("enter");
+    },
+    draw(r) {
+      const bar = $(".gbar"), bb = $("#bossbar"), b = r.boss;
+      if (!bb || !b) return;
+      bar.classList.add("bossmode");
+      bb.hidden = false;
+      bb.innerHTML = `${B.bossSvg(b.def, b.hp <= 0 ? "dead" : "")}<span class="bname">${b.def.name}</span><span class="hearts" aria-label="${b.hp} von ${b.max} Herzen">${Array.from({ length: b.max }, (_, i) => `<i class="h ${i < b.hp ? "on" : "off"}"></i>`).join("")}</span>`;
+      // Zähler: Nummer der Boss-Aufgabe (ändert sich erst mit der nächsten Aufgabe)
+      const c = $("#cnt"); if (c) c.textContent = "⚔️ " + Math.max(1, r.i - r.bossAt + 1);
+    },
+    // Treffer; gibt true zurück, wenn der Boss besiegt ist
+    hit(r) {
+      const b = r.boss;
+      b.hp = Math.max(0, b.hp - 1);
+      petReact("attack");
+      tone("hit");
+      bossUI.draw(r);
+      const svgEl = $("#bossbar .boss");
+      if (svgEl && !quiet()) { svgEl.classList.add("hurt"); fx.burstAt(svgEl, 18, ["#ff6b6b", "#ffd23f", "#ffffff", "#ff8a1e"]); }
+      if (b.hp > 0) return false;
+      b.won = true;
+      const p = pet();
+      p.bosses = p.bosses || {};
+      p.bosses[b.def.id] = (p.bosses[b.def.id] || 0) + 1;
+      b.loot = giveBlocks(b.step >= 2 ? 3 : 2);
+      setTimeout(() => { confetti(110); tone("win"); }, 250);
+      toast(`🏆 ${b.def.name} besiegt!`);
+      return true;
+    },
+    block() {
+      const svgEl = $("#bossbar .boss");
+      if (svgEl && !quiet()) { svgEl.classList.remove("laugh"); void svgEl.getBoundingClientRect(); svgEl.classList.add("laugh"); }
+      petReact("tilt");
+    },
+    line: (b) => (b && b.won ? `⚔️ Boss besiegt: <b>${b.def.name}</b>! ${b.loot ? b.loot.text : ""}` : ""),
+  };
+
+  /* ================= Rennen gegen den eigenen Rekord (Blitzrunde) ================= */
+  const race = {
+    html: () => B.raceHTML(totalXp()),
+    setup(r, trace, ms) { r.ghost = B.ghostTrace(trace, ms); r.goal = B.raceGoal(r.ghost); r.trace = []; r.ahead = false; r.raceMs = ms; },
+    hit(r) { (r.trace = r.trace || []).push(Date.now() - r.t0); },
+    update(r) {
+      const t = Date.now() - r.t0, g = B.ghostAt(r.ghost, t), me = (r.trace || []).length;
+      const a = $("#rme"), b = $("#rghost");
+      // Läufer bleiben in der Bahn: links 0 bis rechts (Breite 34 px + Flagge)
+      const at = (p) => `calc(${p}% - ${p * 0.6}px)`;
+      if (a) a.style.left = at(B.pos(me, r.goal));
+      if (b) b.style.left = at(B.pos(g, r.goal));
+      if (me > g && !r.ahead) { r.ahead = true; r.passed = (r.passed || 0) + 1; toast("💨 Du hast deinen Geist überholt!"); tone("pass"); }
+      else if (me < g) r.ahead = false;
+    },
+  };
+
   /* ================= Bildschirme ================= */
   let view = "home", R = null, D = null;
   // Bildschirmwechsel: Zeitgeber stoppen, Konfetti wegräumen (lenkt sonst ab)
@@ -260,6 +441,7 @@
     if (view === "results") return renderResults();
     if (view === "parents") return renderParents();
     if (view === "pause") return renderPause();
+    if (view === "pet") return renderPet();
   }
 
   function topChips() {
@@ -291,6 +473,7 @@
     const pct = nr ? Math.round(((o.xp - r.xp) / (nr.xp - r.xp)) * 100) : 100;
     return `
       <div class="top">
+        ${petWidget()}
         <div class="hello"><h1>${S.name ? "Hallo " + esc(S.name) + "!" : o.title}</h1>
           <div><span class="rank">${r.name}</span> · ${o.xp} Punkte${nr ? ` · noch ${nr.xp - o.xp} bis ${nr.name}` : ""}</div>
           <div class="xpbar"><i style="width:${pct}%"></i></div></div>
@@ -349,7 +532,10 @@
   function nameModal() {
     const m = document.createElement("div");
     m.className = "modal";
-    m.innerHTML = `<div class="card"><h1>Willkommen!</h1><p>Wie heißt du? Der Name bleibt nur auf diesem iPad.</p><input type="text" id="nm" placeholder="Dein Vorname" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20"><div class="row"><button class="btn" data-act="savename">Los geht's</button><button class="btn ghost" data-act="skipname">Überspringen</button></div></div>`;
+    m.innerHTML = `<div class="card"><h1>Willkommen!</h1><p>Wie heißt du? Der Name bleibt nur auf diesem iPad.</p><input type="text" id="nm" placeholder="Dein Vorname" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20">
+      <div class="dogrow">${B.dog(0, "happy")}<label for="dn">Das ist dein Hund. Er wächst, wenn du übst. Wie soll er heißen?</label></div>
+      <input type="text" id="dn" value="${esc(pet().name)}" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="14" aria-label="Name des Hundes">
+      <div class="row"><button class="btn" data-act="savename">Los geht's</button><button class="btn ghost" data-act="skipname">Überspringen</button></div></div>`;
     document.body.appendChild(m);
   }
 
@@ -467,7 +653,7 @@
   function gameShell(mode) {
     return `<div class="game">
       <div class="gbar"><button class="icon-btn" data-act="quit" aria-label="Beenden">✕</button>
-        ${mode === "blitz" ? `<div class="timer" style="flex:1"><i id="tm"></i></div>` : `<div class="progress"><i id="pg"></i></div>`}<span class="count" id="cnt"></span>
+        ${mode === "blitz" ? race.html() : `<div class="progress"><i id="pg"></i></div><div class="bossbar" id="bossbar" hidden></div>${gdog()}`}<span class="count" id="cnt"></span>
         <span class="xp" id="xpv"></span></div>
       <div class="stage" id="stage"><div class="mapwrap" id="mapwrap">${mapMarkup()}</div><aside class="panel" id="panel"></aside></div></div>`;
   }
@@ -482,10 +668,10 @@
     const q = buildQueue(mode, topic);
     if (!q.length) return toast("Dazu gibt es hier keine Aufgaben. Wähle ein anderes Thema.");
     view = "game";
-    R = { tok: Math.random(), mode, topic, q, i: 0, results: [], xp: 0, hits: 0, t0: Date.now(), mstep: missionStep() };
+    R = { tok: Math.random(), mode, topic, q, i: 0, results: [], xp: 0, hits: 0, combo: 0, t0: Date.now(), mstep: missionStep() };
     app.innerHTML = gameShell(mode);
     wireGame();
-    if (mode === "blitz") blitzTimer();
+    if (mode === "blitz") { race.setup(R, S.blitzTrace, TEST.blitzMs || 60000); blitzTimer(); }
     showQuestion();
   }
 
@@ -495,7 +681,8 @@
       if (!R || R.tok !== tok) return;
       const left = end - Date.now();
       const bar = $("#tm");
-      if (bar) bar.style.width = Math.max(0, left / 600) + "%";
+      if (bar) bar.style.width = Math.max(0, (left / (TEST.blitzMs || 60000)) * 100) + "%";
+      race.update(R);
       if (left <= 0) { R.lock = true; return finish(); }
       setTimeout(tick, 100);
     };
@@ -503,6 +690,7 @@
   }
 
   function updateBar() {
+    if (R.boss) return bossUI.draw(R);
     let n = R.q.length, done = R.i;
     if (R.mode === "blank") done = R.q.filter((it) => R.status[it.id] === "ok" || R.status[it.id] === "bad").length;
     const pg = $("#pg"); if (pg) pg.style.width = (done / n) * 100 + "%";
@@ -511,8 +699,22 @@
     const x = $("#xpv"); if (x) x.textContent = "+" + R.xp;
   }
 
+  // Boss am Ende einer Etappe: zuerst die Fehler dieser Etappe, sonst Aufgaben aus dem Pool der Etappe
+  function startBoss() {
+    const step = Math.min(2, R.mstep), sk = MISSION[step].skill, max = B.bossHp(step);
+    const seen = new Set();
+    let items = R.results.filter((x) => !x.ok && !seen.has(x.q.it.id) && seen.add(x.q.it.id)).map((x) => x.q.it).slice(0, max);
+    if (items.length < max) items = items.concat(sample(poolFor("all", sk).filter((it) => !items.includes(it)), max - items.length, weightFor(sk)));
+    bossUI.start(R, step);
+    R.q.push(...items.map((it) => ({ it, skill: sk, boss: true })));
+    $("#stage").classList.add("bossfight");
+    showQuestion();
+  }
   function showQuestion() {
-    if (R.i >= R.q.length) return finish();
+    if (R.i >= R.q.length) {
+      if (R.mode === "mission" && bossOn() && !R.boss) return startBoss();
+      return finish();
+    }
     const q = R.q[R.i];
     R.cur = q; R.lock = false; R.waitNext = false; R.attempt = 0; R.onMap = null; R.onPanel = null;
     updateBar();
@@ -531,11 +733,21 @@
   function commit(q, res) {
     const ok = res !== "fail";
     record(q.it, q.skill, res);
-    const gain = (res === "first" ? 10 : res === "second" ? 5 : 0) + (ok && q.skill === "write" ? 5 : 0);
+    let gain = (res === "first" ? 10 : res === "second" ? 5 : 0) + (ok && q.skill === "write" ? 5 : 0);
+    R.combo = res === "first" ? (R.combo || 0) + 1 : 0;
+    if (q.boss) {
+      // Boss-Aufgaben zählen nicht zur Etappe; falsch: der Boss blockt, die Aufgabe kommt wieder
+      if (ok) { gain += 5; if (bossUI.hit(R)) { gain += 20; R.q.length = R.i + 1; } }
+      else { bossUI.block(R); R.q.push({ it: q.it, skill: q.skill, boss: true }); }
+    } else {
+      if (ok) R.hits++;
+      R.results.push({ q, res, ok });
+      if (R.mode === "blitz" && ok) race.hit(R);
+    }
     S.xp += gain; R.xp += gain;
-    if (ok) R.hits++;
-    R.results.push({ q, res, ok });
-    tone(ok ? "ok" : "bad");
+    tone(ok ? "ok" : "bad", R.combo);
+    if (!q.boss) petReact(ok ? (R.combo && R.combo % 5 === 0 ? "flip" : "hop") : "tilt");
+    if (ok && gain) fx.plus($("#fb") && $("#fb").firstChild ? $("#fb") : $("#panel"), $("#xpv"), "+" + gain);
     save();
     updateBar();
     checkBadges();
@@ -902,7 +1114,7 @@
       r.grade = gradeFor(r.pct);
       S.probes.push({ date: dayKey(), pct: r.pct, grade: r.grade });
     }
-    if (r.mode === "blitz" && r.hits > S.blitzBest) { r.record = true; S.blitzBest = r.hits; }
+    if (r.mode === "blitz" && r.hits > S.blitzBest) { r.record = true; S.blitzBest = r.hits; S.blitzTrace = (r.trace || []).slice(); }
     if (r.mode === "mission") {
       const step = Math.min(3, r.mstep + 1);
       S.mission = { day: dayKey(), step };
@@ -910,6 +1122,9 @@
       r.newStep = step;
     }
     if (r.mode === "blank" && n === r.all.length && ok === n) S.blankPerfect = true;
+    // Blöcke für die Bauprojekte des Hundes
+    const blocks = r.mode === "mission" ? 3 : r.mode === "probe" || r.record ? 2 : r.mode === "blitz" ? 0 : n ? 1 : 0;
+    r.loot = blocks ? giveBlocks(blocks) : null;
     save();
     checkBadges();
     view = "results";
@@ -960,7 +1175,8 @@
       hint = `<div class="card pausehint"><b>Du übst schon eine Weile, super!</b><span>Zeit für eine kurze Pause?</span><button class="btn ghost" data-act="pause">Bewegungspause (20 s)</button></div>`;
     }
     const li = (it) => `<li>${esc(it.name)}${it.cat === "general" ? "" : ` <span class="muted">(${CATS[it.cat].short})</span>`}</li>`;
-    app.innerHTML = `<div class="results"><div class="card hero"><h1>${head}</h1><div class="score">${big}</div><p class="muted">${sub}</p>${extra}</div>
+    const gains = [bossUI.line(r.boss), r.loot ? r.loot.text : ""].filter(Boolean);
+    app.innerHTML = `<div class="results"><div class="card hero"><h1>${head}</h1><div class="score">${big}</div><p class="muted">${sub}</p>${gains.length ? `<div class="gains">${gains.map((g) => `<div>${g}</div>`).join("")}</div>` : ""}${extra}</div>
       ${hint}
       ${r.mode === "blank" ? "" : `<div class="listcols"><div class="card"><h2>Das kannst du schon</h2><ul>${good.map(li).join("") || "<li class='muted'>noch nichts</li>"}</ul></div>
       <div class="card"><h2>Das üben wir noch</h2><ul>${todo.map(li).join("") || "<li class='muted'>alles richtig 🎉</li>"}</ul></div></div>`}
@@ -1023,6 +1239,7 @@
           <label for="calm">Ruhiger Modus (kein Konfetti, kein Blinken, leisere Töne)</label><input type="checkbox" id="calm" ${S.calm ? "checked" : ""}>
           <label for="ar">Fragen automatisch vorlesen</label><input type="checkbox" id="ar" ${S.autoRead ? "checked" : ""}>
           <label for="bz">Blitzrunde (mit Zeitdruck) anbieten</label><input type="checkbox" id="bz" ${S.showBlitz ? "checked" : ""}>
+          <label for="boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label><input type="checkbox" id="boss" ${bossOn() ? "checked" : ""}>
           <label for="lzk">Datum der LZK</label><input type="date" id="lzk" value="${esc(S.lzkDate || LZK_DATE)}">
         </div>
         <p class="tip">Tipp bei Konzentrationsschwierigkeiten: lieber 2 bis 3 kurze Einheiten am Tag (eine Tagesmission dauert etwa 10 Minuten) als eine lange. Die Bewegungspause zwischen den Etappen hilft beim Weitermachen.</p>
@@ -1033,6 +1250,7 @@
     bind("calm", (el) => { S.calm = el.checked; });
     bind("ar", (el) => { S.autoRead = el.checked; });
     bind("bz", (el) => { S.showBlitz = el.checked; });
+    bind("boss", (el) => { S.bossOn = el.checked; });
     bind("lzk", (el) => { if (/^\d{4}-\d{2}-\d{2}$/.test(el.value)) S.lzkDate = el.value; });
   }
 
@@ -1083,7 +1301,9 @@
       case "again": if (R.mode === "blank") startBlank(R.cat); else if (R.mode === "mission") startRound(missionStep() < 3 ? "mission" : "mix"); else startRound(R.mode); break;
       case "say": say(v); break;
       case "settings": settingsModal(); break;
-      case "savename": S.name = ($("#nm").value || "").trim(); S.askedName = true; save(); closeModal(); renderHome(); break;
+      case "savename": S.name = ($("#nm").value || "").trim(); pet().name = ($("#dn") && $("#dn").value || "").trim() || pet().name; S.askedName = true; save(); closeModal(); renderHome(); break;
+      case "pet": go("pet"); break;
+      case "petpet": petPet(); break;
       case "skipname": S.askedName = true; save(); closeModal(); break;
       case "savesettings": S.name = ($("#nm2").value || "").trim(); S.sound = $("#snd").checked; S.speak = $("#spk").checked; save(); closeModal(); renderHome(); break;
       case "reset":
@@ -1123,6 +1343,8 @@
   const core = {
     get S() { return S; }, get view() { return view; }, app, TEST,
     save, go, $, esc, tone, say, confetti, toast, dayKey, streak, startPause, addTime, checkBadges, header, closeModal, gradeFor, sample, shuffle,
+    // Begleiter, Boss, Rennen, Effekte: für alle Fächer gleich
+    fx, bossUI, bossOn, race, gdog, petReact, giveBlocks, totalXp,
     // Pausen-Hinweis nach 15 Minuten Übungszeit (einmal pro Sitzung)
     pauseHint() { if (sessionMin >= (TEST.pauseAfterMin || 15) && !pauseHinted) { pauseHinted = true; return true; } return false; },
   };
@@ -1130,6 +1352,6 @@
   if (S.subject !== "de" && !fachOf(S.subject)) S.subject = "de";
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; } };
+  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp };
   render();
 })();
