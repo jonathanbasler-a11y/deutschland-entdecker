@@ -81,7 +81,7 @@ const GENERAL = [
     info: "Deutschland hat 3 Stadtstaaten: Berlin, Hamburg und Bremen." },
   { id: "g_stadtstaat_namen", name: "Welche Stadtstaaten", q: "Welche drei Bundesländer sind Stadtstaaten?",
     options: ["Berlin, Hamburg, Bremen", "Berlin, München, Köln", "Hamburg, Bremen, Kiel", "Bremen, Dresden, Berlin"], correct: 0,
-    write: { q: "Nenne einen der drei Stadtstaaten.", answers: STADTSTAATEN, show: "Berlin, Hamburg oder Bremen" },
+    write: { q: "Welche drei Bundesländer sind Stadtstaaten? Schreibe alle drei.", all: STADTSTAATEN, show: "Berlin, Hamburg und Bremen" },
     info: "Die Stadtstaaten sind Berlin, Hamburg und Bremen." },
   { id: "g_stadtstaat_begriff", name: "Was ist ein Stadtstaat", q: "Was ist ein Stadtstaat?",
     options: ["Eine Stadt, die zugleich ein eigenes Bundesland ist", "Die größte Stadt in einem Bundesland", "Eine Stadt am Meer", "Eine Stadt mit mehr als 1 Million Menschen"], correct: 0,

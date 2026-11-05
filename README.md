@@ -4,7 +4,23 @@ Lern-App fürs iPad, 4. Klasse, Baden-Württemberg. Oben wählt man das Fach:
 - **🗺️ Deutschland**: LZK „Deutschland“ (Sachunterricht). Karte zum Antippen, Sterne, Punkte, Abzeichen und eine Probe-LZK mit Note.
 - **🧮 Kopfrechnen**: großes Einmaleins mal und geteilt, mit Zehnern und Hundertern, für den Kopfrechentest auf Zeit.
 
-Name, Serie, Töne, ruhiger Modus, Vorlesen, Bewegungspause und Eltern-Übersicht gelten für beide Fächer. Punkte, Ränge und Abzeichen hat jedes Fach für sich.
+Name, Serie, Töne, ruhiger Modus, Vorlesen, Bewegungspause, Eltern-Übersicht und der Hund gelten für beide Fächer. Punkte, Ränge und Abzeichen hat jedes Fach für sich.
+
+## Der Begleiter-Hund, Bosse und Rennen (beide Fächer)
+Eigener Pixel-Stil mit eigenen Figuren, alles in `public/begleiter.js` gezeichnet.
+- **Pixel-Hund**: Beim ersten Start bekommt er einen Namen. Er wächst mit den Punkten aus allen Fächern zusammen: Welpe (0), Junghund (300), Großer Hund (900), Held-Hund (2000). Dazu kommen Halstuch, Helm, Fackel und Umhang.
+  - Er wedelt, wenn heute geübt wurde, begrüßt einmal am Tag und lässt sich streicheln.
+  - In jeder Runde sitzt er oben in der Leiste: Bei richtigen Antworten hüpft er, bei 5 in Folge macht er einen Salto.
+- **Bauprojekte**: Blöcke für Hundehütte, Garten, Turm und Brücke. Etappe geschafft +3, Boss besiegt +2 (großer Boss +3), Runde geschafft +1, neuer Rekord oder Probe +2.
+- **Boss am Ende jeder Etappe** (Tagesmission Deutschland und Tagestraining Kopfrechnen):
+  - 3 Herzen, in Etappe 3 sind es 5.
+  - Die Boss-Aufgaben sind die Fehler aus der Etappe.
+  - Bei einem Fehler blockt der Boss, und die Aufgabe kommt wieder. Der Boss kann nicht gewinnen.
+  - Jeder besiegte Boss bringt einen Pokal.
+  - In der Eltern-Übersicht abschaltbar.
+- **Rennen gegen den eigenen Rekord** in der Blitzrunde: Ein Geister-Hund läuft den besten Lauf nach. Überholen wird gemeldet; jeder neue Rekord wird der neue Geist.
+- **Steigende Töne**: Jede richtige Antwort in Folge klingt einen Halbton höher. Dazu fliegen Punkte zur Punktezahl und Pixel-Splitter.
+- Der ruhige Modus schaltet Salto, Splitter und fliegende Punkte ab.
 
 ## Kopfrechnen
 **Rechen-Turm** mit 8 Stufen. Ein Stern auf einer Stufe öffnet die nächste:
@@ -29,7 +45,8 @@ Sterne: ★ 8 von 10 richtig, ★★ 80 % der letzten 20, ★★★ 90 % und im 
 
 ## Neues Fach hinzufügen
 Ein Fach ist eine eigene Datei wie `public/fach-rechnen.js`, die sich bei `window.DE_FAECHER` anmeldet
-(`id`, `prefix`, `name`, `icon`, `home`, `render`, `act`, `badges`, `activeOn`, `parents`, `bindParents`).
+(`id`, `prefix`, `name`, `icon`, `home`, `render`, `act`, `badges`, `activeOn`, `xp`, `parents`, `bindParents`).
+Hund, Boss, Rennen und Effekte stellt `core` bereit (`gdog`, `petReact`, `bossUI`, `bossOn`, `race`, `fx`, `giveBlocks`).
 Ansichten und `data-act` des Fachs beginnen mit dem `prefix`. Dann die Datei in `public/index.html` vor `app.js` einbinden
 und in `public/sw.js` in die Liste `FILES` eintragen (und `CACHE` hochzählen). Der Fach-Reiter erscheint von selbst.
 
@@ -50,8 +67,20 @@ Jeder Begriff hat bis zu 3 Sterne: **Auswählen**, **Finden** (auf der Karte ant
 - **Ruhiger Modus** und **automatisches Vorlesen** in der Eltern-Übersicht
 
 ## Stumme Karte
-Nummern auf der Karte wie im LZK-Arbeitsblatt. Zu jeder Nummer den Namen schreiben oder aus dem Wortkasten antippen.
+Nummern auf der Karte wie im LZK-Arbeitsblatt. Zu jeder Nummer den Namen schreiben oder aus dem Wortkasten antippen. Zwei Arten:
+- **📋 Ganzes Blatt** (voreingestellt, wie in der LZK):
+  - Alle Nummern auf einmal mit einem Feld pro Nummer. Was er schreibt, steht gleich auf der Karte.
+  - Eine Nummer auf der Karte antippen springt zum Feld, das Gebiet leuchtet. Enter springt ins nächste leere Feld.
+  - „Prüfen“ bewertet jedes Feld einzeln (grün/rot). Rote Felder kann er einmal verbessern, danach steht dort die Lösung.
+- **1️⃣ Nummer für Nummer**: eine Nummer nach der anderen, mit Tipps.
+
 Am Ende die ausgefüllte Karte (grün/rot) und „Nur die Fehler nochmal“.
+
+## Fragen mit mehreren Antworten
+Zum Beispiel die drei größten Städte, die drei Stadtstaaten, Nord- und Ostsee: Für jede Antwort gibt es ein eigenes Feld, wie bei ANTON.
+- Die Reihenfolge ist egal, jedes Feld wird für sich geprüft.
+- Richtige Felder bleiben grün. Nur die roten werden verbessert, danach steht die Lösung daneben.
+- Doppelte Antworten werden erkannt. Schreibt er alles in ein Feld („Nordsee und Ostsee“), wird es auf die Felder verteilt.
 
 ## Eltern-Übersicht
 Einstellungen → „Für Eltern: gedrückt halten“. Zeigt Bereitschaft je Thema, was noch wackelt, Übungszeit der letzten 7 Tage,
@@ -74,6 +103,8 @@ node tools/test-logic.mjs        # Tests der Auswertung
 node tools/test-rechnen.mjs      # Tests der Rechen-Logik (Aufgaben, Rechentricks, Sterne)
 node tools/e2e.mjs               # Browser-Test, spielt alle Modi durch (braucht Playwright)
 node tools/e2e-rechnen.mjs       # Kopfrechnen: Turm, Fehler, Tagestraining, Blitz, Test, Eltern, iPad-Größen
+node tools/e2e-begleiter.mjs     # Hund, Bauprojekte, Boss am Ende der Etappe, Rennen gegen den Rekord, Effekte
+node tools/e2e-blatt.mjs         # mehrere Antworten in eigenen Feldern, stumme Karte als ganzes Blatt
 node tools/e2e-flows.mjs         # Probe-LZK, Schwächen-Modus, Einstellungen, Speicher, Serie, Countdown
 node tools/e2e-features.mjs      # Tagesmission, Bewegungspause, stumme Karte, Eltern-Übersicht
 node tools/e2e-devices.mjs       # iPad-Größen quer/hoch, Fingertipps, Tastatur, kleine Ziele

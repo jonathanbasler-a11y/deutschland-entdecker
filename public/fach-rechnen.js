@@ -158,6 +158,7 @@
   }
   function startBlitz() {
     newRound("blitz", RL.buildRound(openLevels(), 30, facts(), { targetMs: target() }), { label: "Blitzrunde" });
+    core.race.setup(MR, M().blitzTrace, TEST.blitzMs || 60000);
     blitzTimer();
   }
   function testLevels() {
@@ -204,7 +205,7 @@
     const timed = r.mode === "blitz";
     app.innerHTML = `<div class="game mgame">
       <div class="gbar"><button class="icon-btn" data-act="m-quit" aria-label="Beenden">✕</button>
-        ${timed ? `<div class="timer" style="flex:1"><i id="tm"></i></div>` : `<div class="progress"><i id="pg"></i></div>`}
+        ${timed ? core.race.html() : `<div class="progress"><i id="pg"></i></div><div class="bossbar" id="bossbar" hidden></div>${core.gdog()}`}
         <span class="count" id="cnt"></span><span class="combo" id="combo"></span><span class="xp" id="xpv"></span></div>
       <div class="mstage">
         <div class="mcard" id="mcard">
@@ -228,6 +229,7 @@
     const r = MR;
     const pg = $("#pg"); if (pg) pg.style.width = (r.i / r.q.length) * 100 + "%";
     const c = $("#cnt"); if (c) c.textContent = r.mode === "blitz" ? "✔ " + r.hits : Math.min(r.i + 1, r.q.length) + " / " + r.q.length;
+    if (r.boss) core.bossUI.draw(r);
     const x = $("#xpv"); if (x) x.textContent = r.mode === "test" ? "" : "+" + r.xp;
     const cb = $("#combo");
     if (cb) { cb.textContent = r.combo >= 2 && r.mode !== "test" ? "🔥 " + r.combo : ""; cb.classList.toggle("hot", r.combo >= 5); }
@@ -238,10 +240,25 @@
     el.textContent = r.input || "";
     el.classList.toggle("empty", !r.input);
   }
+  // Boss am Ende einer Etappe: zuerst die Fehler dieser Etappe, sonst Aufgaben aus den Stufen der Etappe
+  function startBoss() {
+    const r = MR, step = Math.min(2, r.mstep), max = window.DEBegleiter.bossHp(step);
+    const seen = new Set();
+    let tasks = r.results.filter((x) => !x.ok && !seen.has(x.t.key) && seen.add(x.t.key)).map((x) => x.t).slice(0, max);
+    if (tasks.length < max) tasks = tasks.concat(RL.buildRound(missionLevels(step), max * 3, facts(), { targetMs: target() }).filter((t) => !seen.has(t.key)).slice(0, max - tasks.length));
+    core.bossUI.start(r, step);
+    r.q.push(...tasks.map((t) => ({ t, boss: true })));
+    const lab = $(".mlabel"); if (lab) lab.textContent = "⚔️ Boss: " + r.boss.def.name;
+    $("#mcard").classList.add("bossfight");
+    showTask();
+  }
   function showTask() {
     const r = MR;
     if (r.mode === "blitz" && r.i >= r.q.length - 2) r.q.push(...RL.buildRound(openLevels(), 30, facts(), { targetMs: target() }).map((t) => ({ t })));
-    if (r.i >= r.q.length) return finish();
+    if (r.i >= r.q.length) {
+      if (r.mode === "mission" && core.bossOn() && !r.boss) return startBoss();
+      return finish();
+    }
     const it = r.q[r.i], t = it.t;
     r.cur = t; r.input = ""; r.attempt = 0; r.lock = false; r.wait = false; r.shown = Date.now();
     const hide = listenOnly();
@@ -254,7 +271,9 @@
     if (r.mode === "practice" || r.mode === "mission") tools.push(`<button class="speak" data-act="m-tip">💡 Tipp</button>`);
     if ((r.mode !== "blitz" && core.S.autoRead) || r.mode === "test") tools.push(`<button class="speak" data-act="m-say" aria-label="Vorlesen">🔊</button>`);
     $("#mtools").innerHTML = tools.join("");
-    if (it.repeat) fb("hint", "Die kennst du schon von eben. Jetzt klappt's!"); else fb();
+    if (it.repeat) fb("hint", "Die kennst du schon von eben. Jetzt klappt's!");
+    else if (it.boss && r.bossTries && r.bossTries[t.key]) fb("hint", "Die hat der Boss eben geblockt. Jetzt triffst du!");
+    else fb();
     updateBar();
     $("#tbar").hidden = true;
     if (r.mode === "test") return testTaskStart();
@@ -286,7 +305,7 @@
   function right(ms) {
     const r = MR, t = r.cur, m = M(), it = r.q[r.i], first = r.attempt === 0;
     r.lock = true;
-    if (first && !it.repeat) record(t, true, ms);
+    if (first && !it.repeat && !it.boss) record(t, true, ms);
     const fast = first && ms <= target();
     let gain = r.mode === "blitz" ? 5 : first ? 10 : 5;
     if (first) {
@@ -295,14 +314,22 @@
       if (r.combo >= 3) gain += Math.min(5, r.combo - 2);
     }
     if (fast && r.mode !== "blitz") { gain += 2; m.fast++; }
-    m.xp += gain; r.xp += gain; r.hits++;
-    if (!it.repeat) r.results.push({ t, ok: first });
+    let won = false;
+    if (it.boss) { won = core.bossUI.hit(r); if (won) { gain += 20; r.q.length = r.i + 1; } }
+    m.xp += gain; r.xp += gain;
+    if (!it.boss) r.hits++;
+    if (r.mode === "blitz") core.race.hit(r);
+    if (!it.repeat && !it.boss) r.results.push({ t, ok: first });
     $("#mans").classList.add("ok"); $("#mcard").classList.add("good");
-    fb("ok", `${pr()}${fast && r.mode !== "blitz" ? " ⚡ Blitzschnell!" : ""}${r.combo >= 3 ? `<small>🔥 ${r.combo} richtig hintereinander</small>` : ""}`);
-    tone("ok");
+    const praiseText = it.boss ? (won ? "Boss besiegt! 🏆" : "Treffer! 💥") : pr();
+    fb("ok", `${praiseText}${fast && r.mode !== "blitz" ? " ⚡ Blitzschnell!" : ""}${r.combo >= 3 ? `<small>🔥 ${r.combo} richtig hintereinander</small>` : ""}`);
+    tone("ok", r.combo);
+    if (!it.boss) core.petReact(r.combo && r.combo % 5 === 0 ? "flip" : "hop");
+    core.fx.plus($("#mans"), $("#xpv"), "+" + gain);
+    core.fx.burstAt($("#mans"), 10);
     if (r.combo > 0 && r.combo % 5 === 0) confetti(r.combo >= 10 ? 70 : 40);
     save(); updateBar(); core.checkBadges();
-    later(next, r.mode === "blitz" ? 350 : 850);
+    later(next, r.mode === "blitz" ? 350 : won ? 1300 : 850);
   }
   function shake() {
     if (core.S.calm) return;
@@ -313,7 +340,8 @@
     r.attempt++;
     shake();
     $("#mans").classList.add("bad");
-    if (r.attempt === 1) { r.combo = 0; if (!it.repeat) record(t, false, ms); }
+    if (r.attempt === 1) { r.combo = 0; if (!it.repeat && !it.boss) record(t, false, ms); }
+    if (it.boss) core.bossUI.block(r); else core.petReact("tilt");
     if (r.mode === "blitz") {
       r.lock = true;
       r.results.push({ t, ok: false });
@@ -324,23 +352,26 @@
     }
     if (r.attempt === 1) {
       tone("bad"); save(); updateBar();
-      fb("hint", `Nicht ganz. ${esc(h.tip)}`);
+      fb("hint", `${it.boss ? "Der Boss blockt!" : "Nicht ganz."} ${esc(h.tip)}`);
       // die falsche Zahl kurz rot stehen lassen; wer schon weitertippt, verliert nichts
       const tok = r.tok, i = r.i;
       r.input = "";
       setTimeout(() => { if (MR === r && r.tok === tok && r.i === i && !r.lock && !r.input) { const a = $("#mans"); if (a) a.classList.remove("bad"); drawInput(); } }, 600);
       return;
     }
-    // zweiter Fehler: Lösung zeigen, Aufgabe kommt später noch einmal
+    // zweiter Fehler: Lösung zeigen, Aufgabe kommt später noch einmal (beim Boss: hinten an, er gewinnt nie)
     r.lock = true; r.wait = true;
-    if (!it.repeat) {
+    if (it.boss) {
+      r.q.push({ t, boss: true });
+      (r.bossTries = r.bossTries || {})[t.key] = 1;
+    } else if (!it.repeat) {
       r.results.push({ t, ok: false });
       r.q.splice(Math.min(r.i + 4, r.q.length), 0, { t, repeat: true });
     }
     const a = $("#mans"); a.textContent = t.ans; a.classList.remove("bad"); a.classList.add("sol");
     $("#mcard").classList.add("badc");
     $("#mtools").innerHTML = "";
-    fb("bad", `So geht's: ${esc(h.explain)}${it.repeat ? "" : "<small>Die Aufgabe kommt gleich noch einmal.</small>"}`);
+    fb("bad", `So geht's: ${esc(h.explain)}${it.repeat ? "" : `<small>${it.boss ? "Der Boss blockt. Die Aufgabe kommt gleich noch einmal." : "Die Aufgabe kommt gleich noch einmal."}</small>`}`);
     $("#kok").textContent = "Weiter";
     tone("bad"); save(); updateBar();
   }
@@ -352,6 +383,7 @@
       if (MR !== r || r.tok !== tok || r.done) return;
       const left = end - Date.now();
       const bar = $("#tm"); if (bar) bar.style.width = Math.max(0, (left / ms) * 100) + "%";
+      core.race.update(r);
       if (left <= 0) { r.lock = true; return finish(); }
       setTimeout(tick, 100);
     };
@@ -462,7 +494,7 @@
     const m = M(), ok = r.results.filter((x) => x.ok).length, n = r.results.length;
     r.ok = ok; r.n = n; r.pct = n ? Math.round((ok / n) * 100) : 0;
     core.addTime(r);
-    if (r.mode === "blitz" && r.hits > m.blitzBest) { r.record = true; m.blitzBest = r.hits; }
+    if (r.mode === "blitz" && r.hits > m.blitzBest) { r.record = true; m.blitzBest = r.hits; m.blitzTrace = (r.trace || []).slice(); }
     if (r.mode === "mission") {
       const step = Math.min(3, r.mstep + 1);
       m.mission = { day: dayKey(), step };
@@ -476,6 +508,9 @@
       m.tests.push({ date: dayKey(), mode: r.mode === "sheet" ? "Blatt" : "Einzeln", n, ok, pct: r.pct, grade: r.grade, secs: r.secs });
       if (m.tests.length > 50) m.tests.splice(0, m.tests.length - 50);
     }
+    // Blöcke für die Bauprojekte des Hundes
+    const blocks = r.mode === "mission" ? 3 : r.mode === "test" || r.mode === "sheet" || r.record ? 2 : r.mode === "blitz" ? 0 : n ? 1 : 0;
+    r.loot = blocks ? core.giveBlocks(blocks) : null;
     save();
     core.checkBadges();
     go("m-results");
@@ -515,7 +550,8 @@
       buttons = wrongBtn + `<button class="btn ${todo.length ? "ghost" : ""}" data-act="m-again">Test nochmal</button>` + home;
       if (r.mode === "sheet") extra = `<div class="sgrid done">${r.results.map((x, i) => `<div class="scell ${x.ok ? "ok" : "bad"}"><span class="sn">${i + 1}</span><span class="sq">${esc(RL.show(x.t))} =</span><span class="sa">${x.ok ? esc(x.given) : `<s>${esc(x.given || "–")}</s> ${x.t.ans}`}</span></div>`).join("")}</div>`;
     }
-    const gains = r.gains.map((g) => g.unlock ? `🔓 Stufe ${LV(g.unlock).n} ist frei: <b>${esc(LV(g.unlock).name)}</b>` : `⭐ Stufe ${LV(g.level).n}: jetzt ${starStr(g.stars)}`);
+    const gains = r.gains.map((g) => g.unlock ? `🔓 Stufe ${LV(g.unlock).n} ist frei: <b>${esc(LV(g.unlock).name)}</b>` : `⭐ Stufe ${LV(g.level).n}: jetzt ${starStr(g.stars)}`)
+      .concat([core.bossUI.line(r.boss), r.loot ? r.loot.text : ""].filter(Boolean));
     let hint = "";
     if (r.mode !== "mission" && core.pauseHint()) hint = `<div class="card pausehint"><b>Du übst schon eine Weile, super!</b><span>Zeit für eine kurze Pause?</span><button class="btn ghost" data-act="m-pausehome">Bewegungspause (20 s)</button></div>`;
     const lists = r.mode === "sheet" ? "" : `<div class="listcols"><div class="card"><h2>Das kannst du schon</h2><ul>${good.slice(0, 12).map(line).join("") || "<li class='muted'>noch nichts</li>"}</ul></div>
@@ -599,6 +635,7 @@
           <label for="m-td">Datum des Kopfrechentests</label><input type="date" id="m-td" value="${esc(s.testDate || "")}">
           <label for="m-calm">Ruhiger Modus (kein Konfetti, leisere Töne)</label>${chk("m-calm", core.S.calm)}
           <label for="m-ar">Aufgaben beim Üben vorlesen</label>${chk("m-ar", core.S.autoRead)}
+          <label for="m-boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label>${chk("m-boss", core.bossOn())}
         </div>
         <p class="tip">Tipp: Erst üben ohne Zeitdruck (Turm, Tagestraining), dann das Test-Training. Wenn du weißt, wie der Test in der Klasse abläuft (vorgelesen oder Blatt, wie viele Aufgaben, wie viel Zeit), stelle es oben genau so ein.</p>
         <button class="linkbtn" data-act="m-reset">Kopfrechnen zurücksetzen</button>
@@ -621,6 +658,7 @@
     bind("m-td", (el) => { if (!el.value || /^\d{4}-\d{2}-\d{2}$/.test(el.value)) s.testDate = el.value; });
     bind("m-calm", (el) => { core.S.calm = el.checked; });
     bind("m-ar", (el) => { core.S.autoRead = el.checked; });
+    bind("m-boss", (el) => { core.S.bossOn = el.checked; });
   }
 
   /* ================= Aktionen ================= */
@@ -681,6 +719,7 @@
   return {
     id: "math", prefix: "m-", name: "Kopfrechnen", icon: "🧮",
     home, act, badges,
+    xp: () => (core.S.math && core.S.math.xp) || 0,
     render(view) { if (view === "m-game") return drawGame(); if (view === "m-sheet") return drawSheet(); if (view === "m-results") return renderResults(); go("home"); },
     activeOn: (k) => !!(core.S.math && core.S.math.days && core.S.math.days[k]),
     parents, bindParents,

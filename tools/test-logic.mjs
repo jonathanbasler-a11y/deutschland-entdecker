@@ -55,6 +55,36 @@ assert.equal(all("Österreich").kind, "wrong");
 assert.equal(all("").kind, "empty");
 assert.ok(L.judgeAll("Berlin, Hamburg und München", ["Berlin", "Hamburg", "München"]).ok);
 assert.equal(L.judgeAll("Berlin Hamburg", ["Berlin", "Hamburg", "München"]).kind, "partial");
+// mehrere Felder, jedes einzeln bewertet, Reihenfolge egal
+const STAEDTE = ["Berlin", "Hamburg", "München"];
+const each = (a) => L.judgeEach(a, STAEDTE);
+let e = each(["Hamburg", "Berlin", "München"]);
+assert.ok(e.ok && e.fields.every((f) => f.ok) && e.missing.length === 0, "andere Reihenfolge ist richtig");
+assert.deepEqual(e.fields.map((f) => f.canonical), ["Hamburg", "Berlin", "München"]);
+e = each(["Berlin", "Köln", ""]);
+assert.deepEqual(e.fields.map((f) => f.ok), [true, false, false]);
+assert.deepEqual(e.fields.map((f) => f.kind), ["exact", "wrong", "empty"]);
+assert.deepEqual(e.missing, ["Hamburg", "München"]);
+e = each(["Berlin", "berlin", "Hamburg"]);
+assert.equal(e.fields[1].kind, "dup", "zweimal Berlin: das zweite Feld ist doppelt");
+assert.deepEqual(e.missing, ["München"]);
+e = each(["Munchen", "Hamburk", "berlin"]);
+assert.ok(e.ok, "Umlaut, Tippfehler und Kleinschreibung gelten");
+assert.deepEqual(e.fields.map((f) => f.kind), ["spelling", "typo", "case"]);
+// ein Tippfehler nimmt keinem genauen Treffer die Antwort weg
+const m = L.judgeEach(["Ostse", "Ostsee"], ["Nordsee", "Ostsee"]);
+assert.deepEqual(m.fields.map((f) => f.ok), [false, true]);
+assert.equal(m.fields[0].kind, "dup");
+assert.deepEqual(L.judgeEach(["Österreich", "Nordsee"], ["Nordsee", "Ostsee"]).fields.map((f) => f.ok), [false, true]);
+// alles in ein Feld geschrieben -> auf die Felder verteilen
+const MEERE = ["Nordsee", "Ostsee"];
+assert.deepEqual(L.splitAnswers("Nordsee und Ostsee", MEERE), MEERE);
+assert.deepEqual(L.splitAnswers("Berlin, Hamburg und München", STAEDTE), STAEDTE);
+assert.deepEqual(L.splitAnswers("Berlin Hamburg München", STAEDTE), STAEDTE);
+assert.deepEqual(L.splitAnswers("nordsee ostse", MEERE), ["nordsee", "ostse"]);
+assert.deepEqual(L.splitAnswers("Schwarzes Meer", MEERE), ["Schwarzes Meer"], "Schwarzes Meer bleibt ein Feld");
+assert.deepEqual(L.splitAnswers("Bad Hamburg", STAEDTE), ["Bad Hamburg"]);
+assert.deepEqual(L.splitAnswers("Berlin", STAEDTE), ["Berlin"]);
 // Buchstaben-Vergleich
 const marked = (d, side) => d[side].filter(([, ok]) => !ok).map(([c]) => c).join("");
 let d = L.diffMark("Denemark", "Dänemark");
