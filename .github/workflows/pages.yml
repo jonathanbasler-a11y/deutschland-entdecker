@@ -39,6 +39,12 @@ jobs:
         run: node tools/e2e-begleiter.mjs
       - name: Mehrere Antworten, stumme Karte als Blatt
         run: node tools/e2e-blatt.mjs
+      - name: Alte und kaputte Spielstände
+        run: node tools/test-migration.mjs
+      - name: Tageswechsel, Serie, Countdown
+        run: node tools/test-tageswechsel.mjs
+      - name: Zufälliges Durchklicken
+        run: node tools/monkey.mjs 300 1
       - name: iPad-Größen
         run: node tools/e2e-devices.mjs chromium
       - name: Offline

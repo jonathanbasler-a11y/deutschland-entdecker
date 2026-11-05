@@ -552,7 +552,7 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .srows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 8px 10px; }
 .srow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .srow .numbadge { min-width: 34px; height: 38px; padding: 0 6px; font-weight: 800; font-size: 1.05rem; font-variant-numeric: tabular-nums; flex: none; }
-.srow input { flex: 1; min-width: 0; font: inherit; font-size: .98rem; font-weight: 700; padding: 9px 8px; border-radius: 12px; border: 3px solid var(--line); background: #fff; color: #10253a; -webkit-user-select: text; user-select: text; }
+.srow input { flex: 1; min-width: 0; font: inherit; font-size: 1rem; font-weight: 700; padding: 9px 8px; border-radius: 12px; border: 3px solid var(--line); background: #fff; color: #10253a; -webkit-user-select: text; user-select: text; }
 .srow.cur input { border-color: var(--sun); box-shadow: 0 0 0 2px var(--sun); }
 .srow .smark { width: 18px; font-weight: 900; text-align: center; flex: none; }
 .srow.ok input { border-color: var(--ok); background: #e5fbf1; }

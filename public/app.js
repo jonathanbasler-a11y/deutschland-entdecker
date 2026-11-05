@@ -719,7 +719,7 @@
       return finish();
     }
     const q = R.q[R.i];
-    R.cur = q; R.lock = false; R.waitNext = false; R.attempt = 0; R.onMap = null; R.onPanel = null;
+    R.cur = q; R.lock = false; R.waitNext = false; R.warned = false; R.attempt = 0; R.onMap = null; R.onPanel = null;
     updateBar();
     const gen = q.it.cat === "general";
     $("#stage").classList.toggle("general", gen);
