@@ -16,7 +16,17 @@
   function M() {
     const S = core.S;
     if (!S.math || typeof S.math !== "object") S.math = mdefaults();
-    if (merged !== S.math) { S.math = Object.assign(mdefaults(), S.math); S.math.set = Object.assign(SET(), S.math.set); merged = S.math; }
+    if (merged !== S.math) {
+      const d = mdefaults(), m = Object.assign(d, S.math);
+      // Felder mit falschem Typ (kaputter Spielstand) auf den Standardwert zurücksetzen
+      const kind = (v) => (Array.isArray(v) ? "array" : v === null ? "null" : typeof v);
+      const base = mdefaults();
+      for (const k of Object.keys(base)) if (kind(m[k]) !== kind(base[k])) m[k] = base[k];
+      m.set = Object.assign(SET(), m.set);
+      const sb = SET();
+      for (const k of Object.keys(sb)) if (kind(m.set[k]) !== kind(sb[k])) m.set[k] = sb[k];
+      S.math = m; merged = m;
+    }
     return S.math;
   }
   const target = () => (+M().set.targetSec || 5) * 1000;

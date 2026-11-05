@@ -105,6 +105,10 @@ node tools/e2e.mjs               # Browser-Test, spielt alle Modi durch (braucht
 node tools/e2e-rechnen.mjs       # Kopfrechnen: Turm, Fehler, Tagestraining, Blitz, Test, Eltern, iPad-Größen
 node tools/e2e-begleiter.mjs     # Hund, Bauprojekte, Boss am Ende der Etappe, Rennen gegen den Rekord, Effekte
 node tools/e2e-blatt.mjs         # mehrere Antworten in eigenen Feldern, stumme Karte als ganzes Blatt
+node tools/test-migration.mjs    # alte, halbe und kaputte Spielstände
+node tools/test-tageswechsel.mjs # Mitternacht, Serie, Tagesmission, LZK-Countdown
+node tools/monkey.mjs 300 1      # zufälliges Durchklicken (Schritte, Startwert); prüft auch Schrift ≥ 16 px in Eingabefeldern
+node tools/test-update.mjs <alte public/>  # Update über eine ältere Version, dann offline (von Hand: z. B. git archive <alter Commit> public)
 node tools/e2e-flows.mjs         # Probe-LZK, Schwächen-Modus, Einstellungen, Speicher, Serie, Countdown
 node tools/e2e-features.mjs      # Tagesmission, Bewegungspause, stumme Karte, Eltern-Übersicht
 node tools/e2e-devices.mjs       # iPad-Größen quer/hoch, Fingertipps, Tastatur, kleine Ziele
