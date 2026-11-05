@@ -359,8 +359,8 @@ body.calm .gbar .combo.hot, body.calm .mans.empty::after { animation: none; }
 /* ================= Kopfrechnen: Blatt ================= */
 .btn.hand { min-height: 48px; padding: 8px 16px; font-size: 1rem; }
 .msheet { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 16px; align-items: start; align-content: start; }
-.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.scell { background: var(--panel); border-radius: 14px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; min-height: 56px; border: 3px solid transparent; font-size: 1.2rem; font-weight: 700; text-align: left; font-variant-numeric: tabular-nums; }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 8px; }
+.scell { background: var(--panel); border-radius: 14px; padding: 8px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; min-height: 56px; border: 3px solid transparent; font-size: 1.2rem; font-weight: 700; text-align: left; font-variant-numeric: tabular-nums; }
 .scell .sn { color: var(--muted); font-size: .8rem; min-width: 1.5em; }
 .scell .sq { flex: 1; white-space: nowrap; }
 .scell .sa { min-width: 3.4em; min-height: 1.7em; background: #fff; color: #10253a; border-radius: 10px; padding: 3px 8px; text-align: right; }
@@ -399,8 +399,9 @@ body.calm .gbar .combo.hot, body.calm .mans.empty::after { animation: none; }
   .mfb .feedback { font-size: 1rem; padding: 10px 12px; }
   .key { min-height: clamp(52px, 8.5vh, 76px); font-size: 1.7rem; }
   .subj { min-width: 0; font-size: 1rem; }
-  .sgrid { grid-template-columns: 1fr 1fr; }
+  .sgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scell { font-size: 1rem; padding: 6px 8px; }
+  .scell .sa { flex: 1 0 auto; min-width: 3em; }
   .scell .sn { display: none; }
   .x1 td { min-width: 30px; font-size: .75rem; }
 }

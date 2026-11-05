@@ -316,10 +316,13 @@ for (const [name, w, h] of DEVICES) {
   check(await noH(), `${name}: Aufgabe ohne seitliches Scrollen`);
   if (shots && /Handy|Air/.test(name)) await shot(p, name.replace(/\s+/g, "-") + "-task");
   await p.click('[data-act="m-quit"]');
+  // ungünstigster Fall: 40 Aufgaben mit allen Stufen, jedes Feld mit dem vollen Ergebnis gefüllt
+  await setM(p, { testN: 40, testLevels: "all8" });
   await p.click('[data-act="m-test"]');
   await p.click('[data-act="m-teststart"][data-v="sheet"]');
   check(await inView(".spad .key"), `${name}: Blatt: Ziffernblock sichtbar`);
   check(await inView("#sc0"), `${name}: Blatt: erste Aufgabe sichtbar`);
+  await p.evaluate(() => window.__DE_M.R.q.forEach((x, i) => { document.getElementById("sa" + i).textContent = x.t.ans; }));
   check(await noH(), `${name}: Blatt ohne seitliches Scrollen`);
   if (shots && /Handy|hoch/.test(name)) await shot(p, name.replace(/\s+/g, "-") + "-sheet");
   check(p.errors.length === 0, `${name}: keine Konsolenfehler ` + p.errors.join(" | "));
