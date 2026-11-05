@@ -23,15 +23,31 @@ Eigener Pixel-Stil mit eigenen Figuren, alles in `public/begleiter.js` gezeichne
 - Der ruhige Modus schaltet Salto, Splitter und fliegende Punkte ab.
 
 ## Kopfrechnen
-**Rechen-Turm** mit 8 Stufen. Ein Stern auf einer Stufe öffnet die nächste:
-1. Kleines 1×1 mal (7 · 8)
-2. Kleines 1×1 geteilt (56 : 7)
-3. Nullen-Trick (36 · 10, 4200 : 100)
-4. Mit Zehnern mal (7 · 90, 70 · 9)
-5. Mit Zehnern geteilt (640 : 8, 640 : 80)
-6. Mit Hundertern (7 · 900, 6300 : 9, 6300 : 900)
-7. Zehner mal Zehner (70 · 90, 6300 : 70)
-8. Zusatz: 11er bis 19er (13 · 7, 91 : 13, 13 · 70), Ergebnisse höchstens 999
+Ausgerichtet auf den echten Kopfrechentest der Klasse: **ein Blatt, 20 Aufgaben, 7 Minuten**.
+Er enthält fast nur kleines 1×1, auch ×1, ×10 und ×11, dazu mal mit Zehnern und Hundertern und einzelne Stellenwert-Aufgaben.
+
+**Rechen-Turm, Testpfad** (genau das kommt im Test dran; ein Stern öffnet die nächste Stufe):
+1. 1×1 mal (7 · 8, 4 · 11, 9 · 1)
+2. 1×1 geteilt (48 : 6, 70 : 10)
+3. Mal mit Zehnern und Hundertern (8 · 80, 3 · 400, 2 · 110)
+4. Große Zahlen (1 · 57.543, 200.000 + 20.000), mit Tausenderpunkten wie auf dem Blatt
+
+**Extra-Stufen** (freiwillig, kommen im Test nicht dran, frei mit einem Stern auf Stufe 4):
+- Nullen-Trick
+- geteilt mit Zehnern (640 : 80)
+- Hunderter (6300 : 9)
+- Zehner mal Zehner (70 · 90)
+- 11er bis 19er
+
+Tagestraining, Boss, Blitzrunde und Test-Training nutzen nur den Testpfad.
+
+**Test-Training** (Standard): Blatt, 20 Aufgaben, 7 Minuten, gemischt wie in der Klasse:
+- 9 Aufgaben 1×1 mal, mit ×11, ×10 und ×1
+- 4 Aufgaben mit Zehnern und Hundertern
+- 1 Aufgabe mit großen Zahlen
+- 6 Aufgaben 1×1 geteilt
+
+Erst kommen die Mal-, dann die Geteiltaufgaben. Ältere Einstellungen werden einmalig auf diesen Standard umgestellt.
 
 Sterne: ★ 8 von 10 richtig, ★★ 80 % der letzten 20, ★★★ 90 % und im Mittel unter der Zielzeit. Sterne gehen nicht wieder verloren.
 
@@ -58,6 +74,13 @@ und in `public/sw.js` in die Liste `FILES` eintragen (und `CACHE` hochzählen). 
 - Alpenvorland, Schwarzwald, Schwäbische Alb, Eifel, Harz, Erzgebirge, Bayerischer Wald
 
 Jeder Begriff hat bis zu 3 Sterne: **Auswählen**, **Finden** (auf der Karte antippen) und **Schreiben**.
+
+## Rechtschreibung im Sachunterricht
+Wie in der LZK: Rechtschreibung wird markiert, aber nicht bewertet. Der Begriff muss nur erkennbar sein.
+- Erkennbar heißt: Er klingt gleich („Reien“ = Rhein, „Schweitz“, „Nidersaksen“) oder hat nur wenige falsche Buchstaben („Bertien“, „Luchsenburg“). Das zählt als richtig, auch in der Probe-LZK.
+- Darunter steht freundlich die richtige Schreibweise mit Buchstabenvergleich.
+- Nie als richtig gilt ein anderer Begriff: Ein Test prüft alle Begriffspaare. Bei Allgemein-Fragen wird mit den anderen Auswahlantworten verglichen.
+- Die Schreibfallen aus dem Lapbook kommen weiter öfter dran, bis sie einmal richtig geschrieben sind.
 
 ## Für Kinder mit ADHS / Konzentrationsschwäche gestaltet
 - **Tagesmission**: ein klarer nächster Schritt, 3 kurze Etappen à 6 Aufgaben, sichtbarer Fortschritt
