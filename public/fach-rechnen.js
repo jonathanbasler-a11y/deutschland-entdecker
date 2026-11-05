@@ -8,8 +8,9 @@
 
   /* ================= Speicher (S.math) ================= */
   const SET = () => ({
-    roundLen: 10, targetSec: 5, gross: true, unlockAll: false,
-    testMode: "ansage", testN: 20, testSec: 8, sheetMin: 5, testRead: true, listenOnly: false, testLevels: "auto", testDate: "",
+    v: 2, roundLen: 10, targetSec: 5, extras: true, unlockAll: false,
+    // wie der Kopfrechentest der Klasse: ein Blatt, 20 Aufgaben, 7 Minuten
+    testMode: "sheet", testN: 20, testSec: 8, sheetMin: 7, testRead: true, listenOnly: false, testLevels: "schule", testDate: "",
   });
   const mdefaults = () => ({ xp: 0, lv: {}, facts: {}, days: {}, blitzBest: 0, bestCombo: 0, fast: 0, total: 0, tests: [], mission: { day: "", step: 0 }, missionsDone: 0, set: SET() });
   let merged = null;
@@ -17,6 +18,7 @@
     const S = core.S;
     if (!S.math || typeof S.math !== "object") S.math = mdefaults();
     if (merged !== S.math) {
+      const oldSet = S.math.set && typeof S.math.set === "object" ? S.math.set : null;
       const d = mdefaults(), m = Object.assign(d, S.math);
       // Felder mit falschem Typ (kaputter Spielstand) auf den Standardwert zurücksetzen
       const kind = (v) => (Array.isArray(v) ? "array" : v === null ? "null" : typeof v);
@@ -25,6 +27,11 @@
       m.set = Object.assign(SET(), m.set);
       const sb = SET();
       for (const k of Object.keys(sb)) if (kind(m.set[k]) !== kind(sb[k])) m.set[k] = sb[k];
+      // Version 1 hatte andere Standardwerte fest im Spielstand: einmalig auf den echten Test umstellen
+      if (oldSet && !(oldSet.v >= 2)) {
+        Object.assign(m.set, { v: 2, testMode: "sheet", sheetMin: 7, testLevels: "schule", extras: oldSet.gross !== false });
+        delete m.set.gross;
+      }
       S.math = m; merged = m;
     }
     return S.math;
@@ -33,17 +40,23 @@
   const roundLen = () => ([5, 10, 15].includes(+M().set.roundLen) ? +M().set.roundLen : 10);
 
   /* ================= Stufen ================= */
-  const enabledLevels = () => RL.LEVELS.filter((l) => !l.extra || M().set.gross).map((l) => l.id);
+  // Testpfad (kommt im Kopfrechentest dran) und, wenn angeboten, die Extra-Stufen
+  const PATH = RL.LEVELS.filter((l) => l.path).map((l) => l.id);
+  const enabledLevels = () => RL.LEVELS.filter((l) => l.path || M().set.extras).map((l) => l.id);
   const lvStat = (id) => M().lv[id] || (M().lv[id] = { recent: [], stars: 0, n: 0 });
   const starsOf = (id) => (M().lv[id] && M().lv[id].stars) || 0;
+  // Testpfad: ein Stern öffnet die nächste Stufe. Extras: alle frei, sobald die letzte Teststufe einen Stern hat.
   function unlocked(id) {
     if (M().set.unlockAll) return true;
-    const en = enabledLevels(), i = en.indexOf(id);
-    return i === 0 || (i > 0 && starsOf(en[i - 1]) >= 1);
+    const i = PATH.indexOf(id);
+    if (i >= 0) return i === 0 || starsOf(PATH[i - 1]) >= 1;
+    return starsOf(PATH[PATH.length - 1]) >= 1;
   }
   const openLevels = () => enabledLevels().filter(unlocked);
+  // Tagestraining, Boss, Blitz und Test nutzen nur den Testpfad
+  const openPath = () => PATH.filter(unlocked);
   function currentLevel() {
-    const open = openLevels();
+    const open = openPath();
     return open.find((id) => starsOf(id) < 1) || open.find((id) => starsOf(id) < 3) || open[open.length - 1];
   }
   const starStr = (n) => "★".repeat(n) + "☆".repeat(3 - n);
@@ -96,8 +109,8 @@
   function missionLevels(step) {
     const cur = currentLevel();
     if (step === 1) return [cur];
-    if (step === 2) return openLevels();
-    const warm = openLevels().filter((id) => id !== cur && starsOf(id) >= 1);
+    if (step === 2) return openPath();
+    const warm = openPath().filter((id) => id !== cur && starsOf(id) >= 1);
     return warm.length ? warm : [cur];
   }
 
@@ -126,7 +139,7 @@
       const l = LV(id), open = unlocked(id), st = starsOf(id);
       const cls = !open ? "locked" : id === cur ? "cur" : st >= 3 ? "top" : "";
       return `<li><button class="rung ${cls}" data-act="m-level" data-v="${id}" ${open ? "" : "disabled"} aria-label="Stufe ${l.n}: ${esc(l.name)}">
-        <span class="rn">${open ? l.n : "🔒"}</span><span class="rt"><b>${esc(l.name)}${l.extra ? ' <i class="tag">Zusatz</i>' : ""}</b><small>${esc(l.ex)}</small></span>
+        <span class="rn">${open ? l.n : "🔒"}</span><span class="rt"><b>${esc(l.name)}${l.extra ? ' <i class="tag">Extra</i>' : ""}</b><small>${esc(l.ex)}</small></span>
         <span class="rs" aria-label="${st} von 3 Sternen">${starStr(st)}</span>${id === cur ? '<span class="here">Du bist hier</span>' : ""}</button></li>`;
     };
     const btn = step < 3
@@ -136,13 +149,16 @@
     const s = m.set;
     app.innerHTML = `${core.header({ title: "Kopfrechnen", ranks: RANKS, xp: m.xp, chips: chips() })}
       <div class="home mhome">
-        <section class="card tower"><h2>Rechen-Turm</h2><ol class="ladder">${en.slice().reverse().map(rung).join("")}</ol>
-          <p class="legend">Ein Stern auf einer Stufe öffnet die nächste. Tippe auf eine Stufe zum Üben.</p></section>
+        <section class="card tower"><h2>Rechen-Turm</h2><ol class="ladder">
+          ${en.filter((id) => LV(id).extra).reverse().map(rung).join("")}
+          ${en.some((id) => LV(id).extra) ? `<li class="ladder-sep">⬆ Extra-Stufen: freiwillig, kommen im Test nicht dran</li>` : ""}
+          ${PATH.slice().reverse().map(rung).join("")}</ol>
+          <p class="legend">Stufe 1 bis ${PATH.length}: genau das kommt im Kopfrechentest dran. Ein Stern öffnet die nächste Stufe.</p></section>
         <div class="right">
           <section class="card mission"><h2>Dein Tagestraining</h2>${missionPath(step)}${btn}</section>
           <div class="modes two">
             <button class="mode" data-act="m-blitz"><span class="ico">⚡</span><b>Blitzrunde</b><span>60 Sekunden, so viele wie möglich. Rekord: ${m.blitzBest}</span></button>
-            <button class="mode" data-act="m-test"><span class="ico">📝</span><b>Test-Training</b><span>Wie in der Schule: ${s.testN} Aufgaben auf Zeit.</span></button>
+            <button class="mode" data-act="m-test"><span class="ico">📝</span><b>Test-Training</b><span>Wie in der Schule: ${s.testN} Aufgaben${s.testMode === "sheet" ? ` in ${s.sheetMin} Minuten` : " auf Zeit"}.</span></button>
           </div>
           ${weak.length ? `<section class="card"><h2>Das üben wir noch</h2><div class="weak">${weak.map((x) => `<span class="pill">${esc(RL.show(x.t))}</span>`).join("")}</div></section>` : ""}
         </div>
@@ -167,20 +183,19 @@
     newRound("mission", RL.buildRound(lv, roundLen(), facts(), { targetMs: target() }), { mstep: step, label });
   }
   function startBlitz() {
-    newRound("blitz", RL.buildRound(openLevels(), 30, facts(), { targetMs: target() }), { label: "Blitzrunde" });
+    newRound("blitz", RL.buildRound(openPath(), 30, facts(), { targetMs: target() }), { label: "Blitzrunde" });
     core.race.setup(MR, M().blitzTrace, TEST.blitzMs || 60000);
     blitzTimer();
   }
   function testLevels() {
     const t = M().set.testLevels, en = enabledLevels();
-    if (t === "all8") return en;
-    if (t === "all7") return en.filter((id) => !LV(id).extra);
-    const open = openLevels().filter((id) => !LV(id).extra);
+    if (t === "all") { const all = openLevels(); return all.length ? all : [en[0]]; }
+    const open = openPath();
     return open.length ? open : [en[0]];
   }
   function startTest(kind) {
     const s = M().set, n = [10, 20, 30, 40].includes(+s.testN) ? +s.testN : 20;
-    const tasks = RL.buildRound(testLevels(), n, facts(), { flat: true });
+    const tasks = s.testLevels === "schule" && n === 20 ? RL.schoolTest() : RL.buildRound(testLevels(), n, facts(), { flat: true });
     if (kind === "sheet") {
       const ms = TEST.sheetMs || (+s.sheetMin || 5) * 60000;
       newRound("sheet", tasks, { label: "Test-Training · Blatt", answers: tasks.map(() => ""), sel: 0, end: Date.now() + ms, limit: ms });
@@ -198,10 +213,10 @@
     const m = document.createElement("div");
     m.className = "modal";
     m.innerHTML = `<div class="card"><h2 style="color:var(--text)">Test-Training 📝</h2>
-      <p class="muted">Wie im echten Test: ${n} Aufgaben. Es gibt erst am Ende eine Auswertung. Atme einmal tief durch, dann los!</p>
+      <p class="muted">Wie im echten Test: ${n} Aufgaben${s.testLevels === "schule" ? ", gemischt wie in der Klasse" : ""}. Es gibt erst am Ende eine Auswertung. Atme einmal tief durch, dann los!</p>
       <div class="choose">
+        <button class="mode ${s.testMode === "sheet" ? "pick" : ""}" data-act="m-teststart" data-v="sheet"><b>📄 Blatt</b><span>Wie in der Klasse: alle Aufgaben auf einem Blatt, ${s.sheetMin} Minuten.</span></button>
         <button class="mode ${s.testMode === "ansage" ? "pick" : ""}" data-act="m-teststart" data-v="ansage"><b>🔊 Einzeln</b><span>${s.testRead ? "Jede Aufgabe wird vorgelesen. " : ""}${sec ? sec + " Sekunden pro Aufgabe." : "Ohne Zeitlimit."}</span></button>
-        <button class="mode ${s.testMode === "sheet" ? "pick" : ""}" data-act="m-teststart" data-v="sheet"><b>📄 Blatt</b><span>Alle Aufgaben auf einem Blatt, ${s.sheetMin} Minuten.</span></button>
       </div>
       <button class="btn ghost" data-act="closemodal">Abbrechen</button></div>`;
     document.body.appendChild(m);
@@ -247,7 +262,7 @@
   function drawInput() {
     const r = MR, el = $("#mans");
     if (!el) return;
-    el.textContent = r.input || "";
+    el.textContent = r.input ? RL.fmtT(r.cur, +r.input) : "";
     el.classList.toggle("empty", !r.input);
   }
   // Boss am Ende einer Etappe: zuerst die Fehler dieser Etappe, sonst Aufgaben aus den Stufen der Etappe
@@ -264,7 +279,7 @@
   }
   function showTask() {
     const r = MR;
-    if (r.mode === "blitz" && r.i >= r.q.length - 2) r.q.push(...RL.buildRound(openLevels(), 30, facts(), { targetMs: target() }).map((t) => ({ t })));
+    if (r.mode === "blitz" && r.i >= r.q.length - 2) r.q.push(...RL.buildRound(openPath(), 30, facts(), { targetMs: target() }).map((t) => ({ t })));
     if (r.i >= r.q.length) {
       if (r.mode === "mission" && core.bossOn() && !r.boss) return startBoss();
       return finish();
@@ -299,7 +314,7 @@
     if (r.lock) { if (r.wait && v === "ok") next(); return; }
     if (v === "del") r.input = (r.input || "").slice(0, -1);
     else if (v === "ok") return submit();
-    else if ((r.input || "").length < 5) r.input = (r.input || "") + v;
+    else if ((r.input || "").length < 7) r.input = (r.input || "") + v;
     const a = $("#mans"); if (a) a.classList.remove("bad");
     drawInput();
   }
@@ -355,8 +370,8 @@
     if (r.mode === "blitz") {
       r.lock = true;
       r.results.push({ t, ok: false });
-      $("#mans").textContent = t.ans; $("#mans").classList.add("sol");
-      fb("bad", `Richtig ist ${t.ans}.`);
+      $("#mans").textContent = RL.fmtT(t, t.ans); $("#mans").classList.add("sol");
+      fb("bad", `Richtig ist ${RL.fmtT(t, t.ans)}.`);
       tone("bad"); save(); updateBar();
       return later(next, 1100);
     }
@@ -378,7 +393,7 @@
       r.results.push({ t, ok: false });
       r.q.splice(Math.min(r.i + 4, r.q.length), 0, { t, repeat: true });
     }
-    const a = $("#mans"); a.textContent = t.ans; a.classList.remove("bad"); a.classList.add("sol");
+    const a = $("#mans"); a.textContent = RL.fmtT(t, t.ans); a.classList.remove("bad"); a.classList.add("sol");
     $("#mcard").classList.add("badc");
     $("#mtools").innerHTML = "";
     fb("bad", `So geht's: ${esc(h.explain)}${it.repeat ? "" : `<small>${it.boss ? "Der Boss blockt. Die Aufgabe kommt gleich noch einmal." : "Die Aufgabe kommt gleich noch einmal."}</small>`}`);
@@ -465,8 +480,8 @@
       const n = r.q.length;
       for (let k = 1; k <= n; k++) { const j = (i + k) % n; if (!r.answers[j]) return sheetSel(j); }
       return toast("Alles ausgefüllt. Tippe auf „Abgeben“.");
-    } else if (r.answers[i].length < 5) r.answers[i] += v;
-    const a = $("#sa" + i); if (a) a.textContent = r.answers[i];
+    } else if (r.answers[i].length < 7) r.answers[i] += v;
+    const a = $("#sa" + i); if (a) a.textContent = r.answers[i] ? RL.fmtT(r.q[i].t, +r.answers[i]) : "";
     $("#sc" + i).classList.toggle("filled", !!r.answers[i]);
   }
   function sheetTimer() {
@@ -527,7 +542,7 @@
     if (r.pct >= 80 || r.record || r.newStep === 3) { confetti(120); tone("win"); }
   }
 
-  const line = (x) => `<li>${esc(RL.show(x.t))} = <b>${x.t.ans}</b>${x.given != null && !x.ok ? ` <span class="muted">(${x.given ? "du: " + esc(x.given) : "keine Antwort"})</span>` : ""}</li>`;
+  const line = (x) => `<li>${esc(RL.show(x.t))} = <b>${RL.fmtT(x.t, x.t.ans)}</b>${x.given != null && !x.ok ? ` <span class="muted">(${x.given ? "du: " + esc(x.given) : "keine Antwort"})</span>` : ""}</li>`;
   function renderResults() {
     const r = MR;
     if (!r) return go("home");
@@ -558,7 +573,7 @@
       const mm = Math.floor(r.secs / 60), ss = r.secs % 60;
       sub = `Note ${r.grade} (nur zur Orientierung) · ${mm ? mm + " min " : ""}${ss} s`;
       buttons = wrongBtn + `<button class="btn ${todo.length ? "ghost" : ""}" data-act="m-again">Test nochmal</button>` + home;
-      if (r.mode === "sheet") extra = `<div class="sgrid done">${r.results.map((x, i) => `<div class="scell ${x.ok ? "ok" : "bad"}"><span class="sn">${i + 1}</span><span class="sq">${esc(RL.show(x.t))} =</span><span class="sa">${x.ok ? esc(x.given) : `<s>${esc(x.given || "–")}</s> ${x.t.ans}`}</span></div>`).join("")}</div>`;
+      if (r.mode === "sheet") extra = `<div class="sgrid done">${r.results.map((x, i) => `<div class="scell ${x.ok ? "ok" : "bad"}"><span class="sn">${i + 1}</span><span class="sq">${esc(RL.show(x.t))} =</span><span class="sa">${x.ok ? esc(RL.fmtT(x.t, +x.given)) : `<s>${esc(x.given || "–")}</s> ${RL.fmtT(x.t, x.t.ans)}`}</span></div>`).join("")}</div>`;
     }
     const gains = r.gains.map((g) => g.unlock ? `🔓 Stufe ${LV(g.unlock).n} ist frei: <b>${esc(LV(g.unlock).name)}</b>` : `⭐ Stufe ${LV(g.level).n}: jetzt ${starStr(g.stars)}`)
       .concat([core.bossUI.line(r.boss), r.loot ? r.loot.text : ""].filter(Boolean));
@@ -579,9 +594,10 @@
     { id: "m_mission1", icon: "🎯", name: "Training geschafft", desc: "Das erste Tagestraining", ok: () => M().missionsDone >= 1 },
     { id: "m_mission3", icon: "🏅", name: "Rechen-Dranbleiber", desc: "3 Tagestrainings geschafft", ok: () => M().missionsDone >= 3 },
     { id: "m_1x1", icon: "✖️", name: "1×1-Profi", desc: "Kleines 1×1 mal und geteilt mit 3 Sternen", ok: () => s3("k-mal", "k-geteilt") },
-    { id: "m_zehner", icon: "🔟", name: "Zehner-Held", desc: "Beide Zehner-Stufen mit 2 Sternen", ok: () => s2("z-mal", "z-geteilt") },
-    { id: "m_hundert", icon: "💯", name: "Hunderter-Held", desc: "Hunderter und Zehner·Zehner mit 2 Sternen", ok: () => s2("h", "zz") },
-    { id: "m_top", icon: "🏰", name: "Turmspitze", desc: "Einen Stern auf der 11er-bis-19er-Stufe", ok: () => starsOf("gross") >= 1 },
+    { id: "m_zehner", icon: "🔟", name: "Zehner-Held", desc: "Mal mit Zehnern und Hundertern mit 2 Sternen", ok: () => s2("z-mal") },
+    { id: "m_hundert", icon: "💯", name: "Stellenwert-Profi", desc: "Große Zahlen mit 2 Sternen", ok: () => s2("stelle") },
+    { id: "m_top", icon: "🏰", name: "Turmspitze", desc: "Alle 4 Teststufen mit mindestens einem Stern", ok: () => PATH.every((id) => starsOf(id) >= 1) },
+    { id: "m_extra", icon: "🧭", name: "Extra-Entdecker", desc: "Einen Stern auf einer Extra-Stufe", ok: () => RL.LEVELS.some((l) => l.extra && starsOf(l.id) >= 1) },
     { id: "m_fast", icon: "🚀", name: "Schnelldenker", desc: "25-mal Blitz-Bonus", ok: () => M().fast >= 25 },
     { id: "m_blitz", icon: "⚡", name: "Rechenblitz", desc: "20 richtig in einer Blitzrunde", ok: () => M().blitzBest >= 20 },
     { id: "m_test", icon: "🏆", name: "Test fehlerfrei", desc: "Test-Training ohne Fehler (ab 10 Aufgaben)", ok: () => M().tests.some((t) => t.pct === 100 && t.n >= 10) },
@@ -595,7 +611,7 @@
       const st = m.lv[l.id], rec = (st && st.recent) || [];
       const okN = rec.filter((x) => x[0]).length;
       const med = RL.median(rec.filter((x) => x[0]).map((x) => x[1]));
-      return `<tr><td>${LV(l.id).n}. ${esc(l.name)}${l.extra && !s.gross ? " <span class='muted'>(aus)</span>" : ""}</td><td>${starStr(starsOf(l.id))}${unlocked(l.id) ? "" : " 🔒"}</td><td>${rec.length ? Math.round((okN / rec.length) * 100) + " %" : "–"}</td><td>${fmtS(med)}</td><td>${(st && st.n) || 0}</td></tr>`;
+      return `<tr><td>${LV(l.id).n}. ${esc(l.name)}${l.extra ? ` <span class='muted'>(Extra${s.extras ? "" : ", aus"})</span>` : " <span class='muted'>(Test)</span>"}</td><td>${starStr(starsOf(l.id))}${unlocked(l.id) ? "" : " 🔒"}</td><td>${rec.length ? Math.round((okN / rec.length) * 100) + " %" : "–"}</td><td>${fmtS(med)}</td><td>${(st && st.n) || 0}</td></tr>`;
     }).join("");
     // 1×1-Tabelle: alle Aufgaben, die auf derselben 1×1-Aufgabe beruhen, zusammen
     const agg = {};
@@ -626,22 +642,22 @@
       <section class="card"><h2>Einmaleins-Tabelle</h2><p class="muted" style="margin-bottom:10px">Jede Aufgabe mit Zehnern oder Hundertern zählt bei ihrer 1×1-Aufgabe mit (640 : 80 bei 8 · 8). So sieht man, welche Grundaufgabe wirklich hakt.</p>
         <div class="x1wrap">${grid}</div>
         <div class="legend"><span><i class="lg good"></i>sicher</span><span><i class="lg slow"></i>richtig, aber langsam</span><span><i class="lg bad"></i>Fehler</span><span><i class="lg na"></i>noch nicht geübt</span></div></section>
-      <section class="card"><h2>Wackelt noch</h2>${weak.length ? `<table class="tbl"><thead><tr><th>Aufgabe</th><th>Ergebnis</th><th>Fehler</th><th>Tempo</th></tr></thead><tbody>${weak.map((x) => `<tr><td>${esc(RL.show(x.t))}</td><td>${x.t.ans}</td><td>${x.f.w}</td><td>${fmtS(x.f.ms)}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Bisher wackelt nichts.</p>`}
+      <section class="card"><h2>Wackelt noch</h2>${weak.length ? `<table class="tbl"><thead><tr><th>Aufgabe</th><th>Ergebnis</th><th>Fehler</th><th>Tempo</th></tr></thead><tbody>${weak.map((x) => `<tr><td>${esc(RL.show(x.t))}</td><td>${RL.fmtT(x.t, x.t.ans)}</td><td>${x.f.w}</td><td>${fmtS(x.f.ms)}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Bisher wackelt nichts.</p>`}
         <p class="muted" style="margin-top:8px">Insgesamt ${m.total} Rechenaufgaben, ${m.missionsDone} Tagestrainings, Blitz-Rekord ${m.blitzBest}.</p></section>
       <section class="card"><h2>Test-Training</h2>${m.tests.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Art</th><th>Richtig</th><th>Zeit</th><th>Note (Orientierung)</th></tr></thead><tbody>${m.tests.slice(-8).reverse().map((t) => `<tr><td>${t.date.split("-").reverse().join(".")}</td><td>${t.mode}</td><td>${t.ok}/${t.n} (${t.pct} %)</td><td>${Math.floor(t.secs / 60)}:${String(t.secs % 60).padStart(2, "0")}</td><td>${t.grade}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Noch kein Test-Training gemacht.</p>`}</section>
       <section class="card"><h2>Einstellungen Kopfrechnen</h2>
         <div class="setgrid">
           <label for="m-rl">Aufgaben pro Übungsrunde</label>${sel("m-rl", [5, 10, 15], roundLen())}
           <label for="m-tg">Zielzeit pro Aufgabe (Blitz-Bonus, 3. Stern)</label>${sel("m-tg", [3, 4, 5, 6, 8], s.targetSec, (o) => o + " s")}
-          <label for="m-gross">Zusatzstufe 11er bis 19er (Ergebnisse bis 999)</label>${chk("m-gross", s.gross)}
+          <label for="m-extras">Extra-Stufen anbieten (Nullen-Trick, geteilt mit Zehnern, Hunderter, Zehner mal Zehner, 11er–19er; kommen im Test nicht dran)</label>${chk("m-extras", s.extras)}
           <label for="m-ua">Alle Stufen freischalten</label>${chk("m-ua", s.unlockAll)}
           <label for="m-tm">Test: Art</label>${sel("m-tm", ["ansage", "sheet"], s.testMode, (o) => (o === "ansage" ? "Einzeln (Ansage)" : "Blatt"))}
           <label for="m-tn">Test: Anzahl Aufgaben</label>${sel("m-tn", [10, 20, 30, 40], s.testN)}
           <label for="m-ts">Einzeln: Sekunden pro Aufgabe</label>${sel("m-ts", [5, 8, 10, 15, 0], s.testSec, (o) => (+o ? o + " s" : "ohne Zeit"))}
           <label for="m-tr">Einzeln: Aufgaben vorlesen</label>${chk("m-tr", s.testRead)}
           <label for="m-lo">Einzeln: nur hören, nicht anzeigen (wie Diktat)</label>${chk("m-lo", s.listenOnly)}
-          <label for="m-sm">Blatt: Zeit</label>${sel("m-sm", [2, 3, 5, 8, 10], s.sheetMin, (o) => o + " Minuten")}
-          <label for="m-tl">Test: welche Stufen</label>${sel("m-tl", ["auto", "all7", "all8"], s.testLevels, (o) => ({ auto: "freigeschaltete (ohne 11er–19er)", all7: "Stufe 1 bis 7", all8: "alle mit 11er–19er" })[o])}
+          <label for="m-sm">Blatt: Zeit</label>${sel("m-sm", [3, 5, 7, 10], s.sheetMin, (o) => o + " Minuten" + (o === 7 ? " (wie in der Klasse)" : ""))}
+          <label for="m-tl">Test: welche Aufgaben</label>${sel("m-tl", ["schule", "auto", "all"], s.testLevels, (o) => ({ schule: "wie im Kopfrechentest der Klasse", auto: "freigeschaltete Teststufen", all: "auch die Extra-Stufen" })[o])}
           <label for="m-td">Datum des Kopfrechentests</label><input type="date" id="m-td" value="${esc(s.testDate || "")}">
           <label for="m-calm">Ruhiger Modus (kein Konfetti, leisere Töne)</label>${chk("m-calm", core.S.calm)}
           <label for="m-ar">Aufgaben beim Üben vorlesen</label>${chk("m-ar", core.S.autoRead)}
@@ -656,7 +672,7 @@
     const bind = (id, fn) => { const el = $("#" + id); if (el) el.onchange = () => { fn(el); save(); document.body.classList.toggle("calm", !!core.S.calm); }; };
     bind("m-rl", (el) => { s.roundLen = +el.value; });
     bind("m-tg", (el) => { s.targetSec = +el.value; });
-    bind("m-gross", (el) => { s.gross = el.checked; });
+    bind("m-extras", (el) => { s.extras = el.checked; });
     bind("m-ua", (el) => { s.unlockAll = el.checked; });
     bind("m-tm", (el) => { s.testMode = el.value; });
     bind("m-tn", (el) => { s.testN = +el.value; });

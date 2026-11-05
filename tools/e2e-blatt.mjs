@@ -88,6 +88,26 @@ async function writeRound(p, first) {
   await ctx.close();
 }
 
+// 2b) Lehrer: Rechtschreibung zählt nicht, erkennbar genügt. Schreibfallen kommen trotzdem weiter dran.
+{
+  const { ctx, p } = await fresh(undefined, { forceFirst: "s_ni" });
+  await p.click('[data-act="mode"][data-v="probe"]');
+  check((await p.textContent("#wprompt")).includes("Bundesland"), "Probe-LZK: Niedersachsen schreiben");
+  await p.fill("#wi", "Nidersaksen"); await p.press("#wi", "Enter");
+  check(!!(await p.$(".feedback.ok")) && (await p.textContent("#fb")).includes("Niedersachsen"), "„Nidersaksen“ zählt als richtig, Schreibtipp zeigt Niedersachsen");
+  check((await ev(p, "window.__DE.R.results[0].ok")) && (await ev(p, "window.__DE.R.typos")) === 1, "gewertet als richtig, als Schreibfehler markiert");
+  check((await ev(p, "window.__DE.S.items.s_ni.sp")) === false, "Schreibfalle bleibt zum Üben offen");
+  await p.click('[data-act="quit"]');
+  await p.evaluate(() => { window.__DE_TEST.forceFirst = "s_ni"; });
+  await p.click("#more > summary");
+  await p.click('[data-act="mode"][data-v="write"]');
+  await p.fill("#wi", "Niedersachsen"); await p.press("#wi", "Enter");
+  check((await ev(p, "window.__DE.S.items.s_ni.sp")) === true, "Richtig geschrieben: Schreibfalle geschafft");
+  await p.click('[data-act="quit"]');
+  check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
+  await ctx.close();
+}
+
 // 3) Stumme Karte als ganzes Blatt
 {
   const { ctx, p } = await fresh();
