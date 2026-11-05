@@ -1,7 +1,7 @@
 {
   "name": "Deutschland-Entdecker",
   "short_name": "Deutschland",
-  "description": "Üben für die LZK: Bundesländer, Nachbarländer, Flüsse und Gebirge.",
+  "description": "Üben für die LZK Deutschland (Bundesländer, Nachbarländer, Flüsse, Gebirge) und Kopfrechnen (großes Einmaleins).",
   "lang": "de",
   "start_url": "./",
   "scope": "./",

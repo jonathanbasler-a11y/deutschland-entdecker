@@ -24,8 +24,14 @@ await ctx.setOffline(true);
 await p.reload();
 const ok = await p.waitForSelector("[data-act=\"mission\"]", { timeout: 8000 }).then(() => true, () => false);
 const map = ok && (await p.$$(".map .st")).length === 16;
+// Kopfrechnen kommt auch offline
+let math = false;
+if (ok) {
+  await p.evaluate(() => document.querySelector('[data-act="subject"][data-v="math"]').click());
+  math = !!(await p.$(".mhome")) && (await p.evaluate(() => !!window.DERechnen));
+}
 await b.close();
 srv.close();
-const good = ok && map && !errors.length;
-console.log(good ? "offline ok" : "offline FEHLER " + errors.join(" | "));
+const good = ok && map && math && !errors.length;
+console.log(good ? "offline ok" : "offline FEHLER " + JSON.stringify({ ok, map, math }) + " " + errors.join(" | "));
 process.exit(good ? 0 : 1);

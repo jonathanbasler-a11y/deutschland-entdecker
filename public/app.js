@@ -1,6 +1,7 @@
 "use strict";
 (function () {
-  const { judge, judgeAll, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
+  const { judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest } = DELogic;
+  const B = window.DEBegleiter;
   const app = document.getElementById("app");
   const KEY = "deutschland-entdecker-v1";
   const TEST = window.__DE_TEST || {};
@@ -11,11 +12,19 @@
     sound: true, speak: false,
     // Einstellungen aus der Eltern-Übersicht
     roundLen: 8, calm: false, autoRead: false, showBlitz: true, lzkDate: LZK_DATE,
-    mission: { day: "", step: 0 }, missionsDone: 0, blankMode: "write", ui: { more: false },
+    mission: { day: "", step: 0 }, missionsDone: 0, blankMode: "write", blankStyle: "sheet", ui: { more: false },
+    subject: "de", // gewähltes Fach: "de" (Deutschland) oder eines aus DE_FAECHER
+    // Begleiter-Hund (für alle Fächer), Boss-Kämpfe, Geister-Lauf der Blitzrunde
+    pet: { name: "Pixel", blocks: 0, bosses: {}, lastGreet: "", petted: 0, stage: 0, gear: 0 }, bossOn: true, blitzTrace: [],
   });
   let S = defaults();
   try { const raw = JSON.parse(localStorage.getItem(KEY) || "null"); if (raw) S = Object.assign(defaults(), raw); } catch (e) { /* ohne Speicher weiter */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* egal */ } };
+
+  // Weitere Fächer (z. B. Kopfrechnen) melden sich über window.DE_FAECHER an, siehe unten "Fächer".
+  let FAECH = [];
+  const fachOf = (id) => FAECH.find((f) => f.id === id);
+  const fachFor = (name) => FAECH.find((f) => name && name.startsWith(f.prefix));
 
   const pad = (n) => String(n).padStart(2, "0");
   const dayKey = (d = new Date()) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
@@ -45,15 +54,15 @@
     e.t = dayKey();
     S.days[dayKey()] = (S.days[dayKey()] || 0) + 1;
   }
+  // Die Serie zählt Tage, an denen in irgendeinem Fach geübt wurde.
+  const active = (k) => !!S.days[k] || FAECH.some((f) => f.activeOn && f.activeOn(k));
   function streak() {
     let n = 0;
     const d = new Date();
-    if (!S.days[dayKey(d)]) d.setDate(d.getDate() - 1);
-    while (S.days[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); }
+    if (!active(dayKey(d))) d.setDate(d.getDate() - 1);
+    while (active(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
     return n;
   }
-  const rankOf = (xp) => RANKS.reduce((r, x) => (xp >= x.xp ? x : r), RANKS[0]);
-  const nextRank = (xp) => RANKS.find((r) => r.xp > xp);
   function daysToLZK() {
     const a = new Date(dayKey() + "T00:00:00"), b = new Date((S.lzkDate || LZK_DATE) + "T00:00:00");
     return Math.round((b - a) / 864e5);
@@ -88,8 +97,10 @@
     { id: "probe1", icon: "🏆", name: "Fehlerfrei", desc: "Probe-LZK ohne einen Fehler", ok: () => S.probes.some((p) => p.pct === 100) },
     { id: "alles", icon: "👑", name: "Deutschland-Profi", desc: "Alles mit 3 Sternen", ok: () => ITEMS.every((i) => stars(i) === i.skills.length) },
   ];
+  const allBadges = () => BADGES.concat(...FAECH.map((f) => f.badges || []));
   function checkBadges() {
-    for (const b of BADGES) {
+    petCheck();
+    for (const b of allBadges()) {
       if (!S.badges[b.id] && b.ok()) {
         S.badges[b.id] = dayKey();
         save();
@@ -102,32 +113,42 @@
 
   /* ================= Ton, Sprache, Konfetti ================= */
   let ac;
-  function tone(kind) {
+  // [Frequenz, Start, Wellenform, Endfrequenz]
+  const TONES = {
+    ok: [[660, 0], [880, 0.09]], bad: [[220, 0, "triangle"], [180, 0.1, "triangle"]], win: [[523, 0], [659, 0.1], [784, 0.2], [1047, 0.3]],
+    wuff: [[560, 0, "sawtooth", 260], [500, 0.14, "sawtooth", 240]], hit: [[180, 0, "square", 55], [90, 0.05, "triangle", 40]],
+    boss: [[196, 0, "triangle"], [185, 0.16, "triangle"], [147, 0.32, "triangle"]], pass: [[784, 0], [988, 0.08], [1319, 0.16]],
+  };
+  // combo: jede richtige Antwort in Folge einen Halbton höher (bis eine Oktave)
+  function tone(kind, combo) {
+    const mult = kind === "ok" && combo > 1 ? Math.pow(2, Math.min(12, combo - 1) / 12) : 1;
+    window.__DE_TONE = { kind, mult };
     if (!S.sound) return;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       if (ac.state === "suspended") ac.resume();
-      const seq = { ok: [[660, 0], [880, 0.09]], bad: [[220, 0], [180, 0.1]], win: [[523, 0], [659, 0.1], [784, 0.2], [1047, 0.3]] }[kind];
-      const vol = S.calm ? 0.08 : 0.18;
-      for (const [f, t] of seq) {
-        const o = ac.createOscillator(), g = ac.createGain();
-        o.type = kind === "bad" ? "triangle" : "sine";
-        o.frequency.value = f;
-        g.gain.setValueAtTime(0.0001, ac.currentTime + t);
-        g.gain.exponentialRampToValueAtTime(vol, ac.currentTime + t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.22);
+      const vol = S.calm ? 0.08 : kind === "wuff" || kind === "hit" ? 0.12 : 0.18;
+      for (const [f, t, type, f2] of TONES[kind]) {
+        const o = ac.createOscillator(), g = ac.createGain(), now = ac.currentTime + t;
+        o.type = type || "sine";
+        o.frequency.setValueAtTime(f * mult, now);
+        if (f2) o.frequency.exponentialRampToValueAtTime(f2, now + 0.12);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(vol, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
         o.connect(g); g.connect(ac.destination);
-        o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.25);
+        o.start(now); o.stop(now + 0.25);
       }
     } catch (e) { /* kein Ton */ }
   }
-  function say(text) {
+  function say(text, done) {
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "de-DE"; u.rate = 0.9;
+      if (done) { u.onend = done; u.onerror = done; }
       speechSynthesis.speak(u);
-    } catch (e) { /* keine Sprachausgabe */ }
+    } catch (e) { if (done) done(); }
   }
   const cv = document.getElementById("confetti");
   let parts = [], raf = 0;
@@ -144,12 +165,39 @@
     parts = parts.filter((p) => p.life-- > 0);
     for (const p of parts) {
       p.x += p.vx; p.y += p.vy; p.vy += 0.45; p.vx *= 0.99; p.r += p.vr;
-      g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.globalAlpha = Math.min(1, p.life / 30);
-      g.fillRect(-p.s / 2, -p.s / 3, p.s, p.s / 1.6); g.restore();
+      g.save(); g.translate(p.x, p.y); if (!p.sq) g.rotate(p.r); g.fillStyle = p.c; g.globalAlpha = Math.min(1, p.life / 30);
+      if (p.sq) g.fillRect(Math.round(-p.s / 2), Math.round(-p.s / 2), p.s, p.s); else g.fillRect(-p.s / 2, -p.s / 3, p.s, p.s / 1.6);
+      g.restore();
     }
     raf = parts.length ? requestAnimationFrame(stepConfetti) : 0;
     if (!raf) g.clearRect(0, 0, cv.width, cv.height);
   }
+  const quiet = () => S.calm || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fx = {
+    // eckige Splitter in Blockfarben an einer Stelle des Bildschirms
+    burst(x, y, n = 14, cols) {
+      if (quiet()) return;
+      if (cv.width !== innerWidth) { cv.width = innerWidth; cv.height = innerHeight; }
+      cols = cols || ["#5aa64a", "#8a5a2b", "#ffd23f", "#8d9196", "#bfeaff", "#c47f3c"];
+      for (let i = 0; i < n; i++) parts.push({ sq: true, x, y, vx: (Math.random() - 0.5) * 9, vy: -Math.random() * 8 - 2, s: 5 + Math.round(Math.random() * 4), c: cols[i % cols.length], r: 0, vr: 0, life: 40 + Math.random() * 20 });
+      if (!raf) raf = requestAnimationFrame(stepConfetti);
+    },
+    burstAt(el, n, cols) { if (!el) return; const r = el.getBoundingClientRect(); fx.burst(r.left + r.width / 2, r.top + r.height / 2, n, cols); },
+    // "+10" fliegt vom Antwortfeld zur Punktezahl
+    plus(from, to, text) {
+      if (quiet() || !from || !to || !from.getBoundingClientRect) return;
+      const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+      const el = document.createElement("div");
+      el.className = "flyplus"; el.textContent = text;
+      el.style.left = a.left + a.width / 2 + "px"; el.style.top = a.top + "px";
+      document.body.appendChild(el);
+      const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top - a.top;
+      try {
+        el.animate([{ transform: "translate(-50%, 0) scale(1)", opacity: 1 }, { transform: "translate(-50%, -24px) scale(1.25)", opacity: 1, offset: 0.35 }, { transform: `translate(calc(-50% + ${dx}px), ${dy}px) scale(.6)`, opacity: 0.2 }], { duration: 800, easing: "ease-in" }).onfinish = () => el.remove();
+      } catch (e) { setTimeout(() => el.remove(), 800); }
+    },
+  };
+
   let toastT;
   function toast(msg) {
     document.querySelectorAll(".toast").forEach((t) => t.remove());
@@ -236,6 +284,147 @@
     root.querySelectorAll(".river").forEach((el, i) => { const it = BY_ID["w_" + MAP.water.filter((w) => w.kind === "Fluss")[i].id]; el.style.strokeWidth = 2.2 + stars(it) * 1.6; });
   }
 
+  /* ================= Begleiter: Pixel-Hund, Bauprojekte ================= */
+  const pet = () => S.pet || (S.pet = defaults().pet);
+  // Futter = Punkte aus allen Fächern zusammen
+  const totalXp = () => S.xp + FAECH.reduce((a, f) => a + (f.xp ? f.xp() : 0), 0);
+  // Hund gewachsen oder neue Ausrüstung? Einmal feiern.
+  function petCheck() {
+    const p = pet(), xp = totalXp(), st = B.stageOf(xp), gear = B.gearOf(xp).length;
+    if (st > (p.stage || 0)) { p.stage = st; p.gear = Math.max(p.gear || 0, gear); save(); toast(`🐶 ${p.name} ist gewachsen: ${B.STAGES[st].name}!`); confetti(90); tone("wuff"); return; }
+    if (gear > (p.gear || 0)) { p.gear = gear; save(); toast(`🎁 ${p.name} hat etwas Neues: ${B.GEAR[gear - 1].name}!`); confetti(60); tone("win"); }
+  }
+  // Blöcke für die Bauprojekte; gibt zurück, was sich getan hat
+  function giveBlocks(n) {
+    const p = pet(), before = B.building(p.blocks || 0);
+    p.blocks = (p.blocks || 0) + n;
+    const after = B.building(p.blocks);
+    save();
+    const fin = after.done.length > before.done.length ? B.PROJECTS.find((x) => x.id === after.done[after.done.length - 1]) : null;
+    const where = after.cur ? `${after.cur.name}: ${after.placed} von ${after.cur.size}` : "Bonus-Blöcke";
+    return { n, fin, text: `🧱 +${n} ${n === 1 ? "Block" : "Blöcke"} (${where})${fin ? ` · 🏠 ${fin.name} fertig gebaut!` : ""}` };
+  }
+  function petWidget() {
+    const p = pet(), xp = totalXp(), g = B.growth(xp), happy = active(dayKey());
+    let bubble = "";
+    if (S.askedName && p.lastGreet !== dayKey()) { p.lastGreet = dayKey(); save(); bubble = `<span class="bubble">Wuff! Da bist du ja${S.name ? ", " + esc(S.name) : ""}!</span>`; }
+    else if (!happy) bubble = `<span class="bubble soft">Ich warte auf dich!</span>`;
+    return `<button class="petw ${happy ? "happy" : "wait"}" data-act="pet" aria-label="Mein Hund ${esc(p.name)}">${B.dog(xp)}<span class="pinfo"><b>${esc(p.name)}</b><small>${g.name}</small><span class="pbar"><i style="width:${g.pct}%"></i></span></span>${bubble}</button>`;
+  }
+  // kleiner Hund in der Leiste oben: hüpft, macht Salto, legt den Kopf schief
+  function petReact(kind) {
+    const d = $("#gdog");
+    if (!d) return;
+    if (S.calm && (kind === "flip" || kind === "attack")) kind = "hop";
+    d.classList.remove("hop", "flip", "tilt", "attack");
+    void d.offsetWidth;
+    d.classList.add(kind);
+  }
+  const gdog = () => `<span class="gdog" id="gdog">${B.dog(totalXp(), "run")}</span>`;
+
+  function renderPet() {
+    const p = pet(), xp = totalXp(), g = B.growth(xp), gear = B.gearOf(xp), bd = B.building(p.blocks || 0);
+    const GI = { scarf: "🧣", helm: "⛑️", torch: "🔥", cape: "🦸" };
+    const proj = bd.cur
+      ? `<h2>Bauprojekt: ${bd.cur.name}</h2><div class="build">${B.projectSvg(bd.cur, bd.placed)}${gear.includes("torch") ? B.torch() : ""}</div><p class="bstat"><b>${bd.placed} von ${bd.cur.size} Blöcken</b>${bd.done.length ? ` · Fertig: ${bd.done.map((id) => B.PROJECTS.find((x) => x.id === id).name).join(", ")}` : ""}</p>`
+      : `<h2>Alle Bauprojekte fertig! 🏆</h2><div class="build">${B.PROJECTS.map((x) => B.projectSvg(x, x.size, "small")).join("")}</div><p class="bstat"><b>Du bist Baumeister!</b> ${bd.bonus} Bonus-Blöcke</p>`;
+    app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein Hund</h1></div>
+      <section class="card petstage">
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp)}</button>
+        <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
+          <div class="pbar big"><i style="width:${g.pct}%"></i></div>
+          <p class="muted">${g.next ? `Noch ${g.need} Punkte, dann wird ${esc(p.name)} zum ${g.next}. Punkte gibt es in jedem Fach.` : "Ganz groß geworden!"}</p>
+          <p class="muted">Tippe auf ${esc(p.name)} zum Streicheln.</p>
+          <form class="rename" id="rnf" autocomplete="off"><input id="dogname" type="text" maxlength="14" value="${esc(p.name)}" aria-label="Name des Hundes" autocapitalize="words" autocorrect="off" spellcheck="false"><button class="btn ghost" type="submit">Umbenennen</button></form>
+        </div>
+      </section>
+      <section class="card"><h2>Ausrüstung</h2><div class="gear">${B.GEAR.map((x) => `<div class="gitem ${gear.includes(x.id) ? "got" : ""}"><span class="gi">${GI[x.id]}</span><b>${x.name}</b><small>${gear.includes(x.id) ? "freigeschaltet" : `ab ${x.xp} Punkten`}</small></div>`).join("")}</div></section>
+      <section class="card">${proj}<p class="muted">Blöcke bekommst du so: Etappe geschafft +3 · Boss besiegt +2 (großer Boss +3) · Runde geschafft +1 · neuer Rekord oder Probe +2</p></section>
+      <section class="card"><h2>Boss-Pokale</h2><div class="trophies">${B.BOSSES.map((b) => { const n = (p.bosses || {})[b.id] || 0; return `<div class="trophy ${n ? "got" : ""}">${B.bossSvg(b)}<b>${n ? b.name : "???"}</b><small>${n ? n + "× besiegt" : "noch nicht getroffen"}</small></div>`; }).join("")}</div></section>
+    </div>`;
+    $("#rnf").onsubmit = (e) => { e.preventDefault(); const v = ($("#dogname").value || "").trim(); if (v) { pet().name = v; save(); toast("🐶 Hallo " + v + "!"); renderPet(); } };
+  }
+  function petPet() {
+    const d = $("#bigdog");
+    if (!d) return;
+    pet().petted = (pet().petted || 0) + 1; save();
+    tone("wuff");
+    d.classList.remove("pat"); void d.offsetWidth; d.classList.add("pat");
+    for (let i = 0; i < 4; i++) {
+      const h = document.createElement("span");
+      h.className = "heart"; h.textContent = "❤";
+      h.style.left = 20 + Math.random() * 60 + "%"; h.style.animationDelay = i * 0.12 + "s";
+      d.appendChild(h);
+      setTimeout(() => h.remove(), 1600);
+    }
+  }
+
+  /* ================= Boss am Ende einer Etappe (für alle Fächer) ================= */
+  const bossOn = () => S.bossOn !== false;
+  const bossUI = {
+    // r.boss anlegen; die Aufgaben hängt das Fach selbst an
+    start(r, step) {
+      const def = B.bossFor(dayKey(), step), max = B.bossHp(step);
+      r.boss = { def, hp: max, max, step };
+      r.bossAt = r.q.length;
+      toast(`⚔️ Ein Boss erscheint: ${def.name}!`);
+      tone("boss");
+      bossUI.draw(r);
+      const bb = $("#bossbar"); if (bb && !quiet()) bb.classList.add("enter");
+    },
+    draw(r) {
+      const bar = $(".gbar"), bb = $("#bossbar"), b = r.boss;
+      if (!bb || !b) return;
+      bar.classList.add("bossmode");
+      bb.hidden = false;
+      bb.innerHTML = `${B.bossSvg(b.def, b.hp <= 0 ? "dead" : "")}<span class="bname">${b.def.name}</span><span class="hearts" aria-label="${b.hp} von ${b.max} Herzen">${Array.from({ length: b.max }, (_, i) => `<i class="h ${i < b.hp ? "on" : "off"}"></i>`).join("")}</span>`;
+      // Zähler: Nummer der Boss-Aufgabe (ändert sich erst mit der nächsten Aufgabe)
+      const c = $("#cnt"); if (c) c.textContent = "⚔️ " + Math.max(1, r.i - r.bossAt + 1);
+    },
+    // Treffer; gibt true zurück, wenn der Boss besiegt ist
+    hit(r) {
+      const b = r.boss;
+      b.hp = Math.max(0, b.hp - 1);
+      petReact("attack");
+      tone("hit");
+      bossUI.draw(r);
+      const svgEl = $("#bossbar .boss");
+      if (svgEl && !quiet()) { svgEl.classList.add("hurt"); fx.burstAt(svgEl, 18, ["#ff6b6b", "#ffd23f", "#ffffff", "#ff8a1e"]); }
+      if (b.hp > 0) return false;
+      b.won = true;
+      const p = pet();
+      p.bosses = p.bosses || {};
+      p.bosses[b.def.id] = (p.bosses[b.def.id] || 0) + 1;
+      b.loot = giveBlocks(b.step >= 2 ? 3 : 2);
+      setTimeout(() => { confetti(110); tone("win"); }, 250);
+      toast(`🏆 ${b.def.name} besiegt!`);
+      return true;
+    },
+    block() {
+      const svgEl = $("#bossbar .boss");
+      if (svgEl && !quiet()) { svgEl.classList.remove("laugh"); void svgEl.getBoundingClientRect(); svgEl.classList.add("laugh"); }
+      petReact("tilt");
+    },
+    line: (b) => (b && b.won ? `⚔️ Boss besiegt: <b>${b.def.name}</b>! ${b.loot ? b.loot.text : ""}` : ""),
+  };
+
+  /* ================= Rennen gegen den eigenen Rekord (Blitzrunde) ================= */
+  const race = {
+    html: () => B.raceHTML(totalXp()),
+    setup(r, trace, ms) { r.ghost = B.ghostTrace(trace, ms); r.goal = B.raceGoal(r.ghost); r.trace = []; r.ahead = false; r.raceMs = ms; },
+    hit(r) { (r.trace = r.trace || []).push(Date.now() - r.t0); },
+    update(r) {
+      const t = Date.now() - r.t0, g = B.ghostAt(r.ghost, t), me = (r.trace || []).length;
+      const a = $("#rme"), b = $("#rghost");
+      // Läufer bleiben in der Bahn: links 0 bis rechts (Breite 34 px + Flagge)
+      const at = (p) => `calc(${p}% - ${p * 0.6}px)`;
+      if (a) a.style.left = at(B.pos(me, r.goal));
+      if (b) b.style.left = at(B.pos(g, r.goal));
+      if (me > g && !r.ahead) { r.ahead = true; r.passed = (r.passed || 0) + 1; toast("💨 Du hast deinen Geist überholt!"); tone("pass"); }
+      else if (me < g) r.ahead = false;
+    },
+  };
+
   /* ================= Bildschirme ================= */
   let view = "home", R = null, D = null;
   // Bildschirmwechsel: Zeitgeber stoppen, Konfetti wegräumen (lenkt sonst ab)
@@ -244,12 +433,15 @@
 
   function render() {
     applyCalm();
+    const f = fachFor(view);
+    if (f) return f.render(view);
     if (view === "home") return renderHome();
     if (view === "discover") return renderDiscover();
     if (view === "badges") return renderBadges();
     if (view === "results") return renderResults();
     if (view === "parents") return renderParents();
     if (view === "pause") return renderPause();
+    if (view === "pet") return renderPet();
   }
 
   function topChips() {
@@ -270,9 +462,30 @@
     return `<ol class="path">${MISSION.map((m, i) => `<li class="${i < step ? "done" : i === step ? "now" : ""}"><span class="dot">${i < step ? "✓" : m.icon}</span><span>${m.name}</span></li>`).join("")}<li class="${step >= 3 ? "done" : ""}"><span class="dot">🏆</span><span>Geschafft</span></li></ol>`;
   }
 
+  /* ---------- Kopfzeile und Fach-Reiter (für alle Fächer) ---------- */
+  function subjectTabs() {
+    if (!FAECH.length) return "";
+    const list = [{ id: "de", icon: "🗺️", name: "Deutschland" }].concat(FAECH);
+    return `<nav class="subjects" aria-label="Fach">${list.map((f) => `<button class="subj" data-act="subject" data-v="${f.id}" aria-pressed="${S.subject === f.id}"><span class="ico">${f.icon}</span>${esc(f.name)}</button>`).join("")}</nav>`;
+  }
+  function header(o) {
+    const r = o.ranks.reduce((a, x) => (o.xp >= x.xp ? x : a), o.ranks[0]), nr = o.ranks.find((x) => x.xp > o.xp);
+    const pct = nr ? Math.round(((o.xp - r.xp) / (nr.xp - r.xp)) * 100) : 100;
+    return `
+      <div class="top">
+        ${petWidget()}
+        <div class="hello"><h1>${S.name ? "Hallo " + esc(S.name) + "!" : o.title}</h1>
+          <div><span class="rank">${r.name}</span> · ${o.xp} Punkte${nr ? ` · noch ${nr.xp - o.xp} bis ${nr.name}` : ""}</div>
+          <div class="xpbar"><i style="width:${pct}%"></i></div></div>
+        ${o.chips}
+        <button class="icon-btn" data-act="badges" aria-label="Abzeichen">🏅</button>
+        <button class="icon-btn" data-act="settings" aria-label="Einstellungen">⚙️</button>
+      </div>${subjectTabs()}`;
+  }
+
   function renderHome() {
-    const r = rankOf(S.xp), nr = nextRank(S.xp);
-    const pct = nr ? Math.round(((S.xp - r.xp) / (nr.xp - r.xp)) * 100) : 100;
+    const fach = S.subject !== "de" && fachOf(S.subject);
+    if (fach) { fach.home(); if (!S.askedName) nameModal(); return; }
     const tp = S.topic;
     const canTap = tp !== "general";
     const step = missionStep();
@@ -286,15 +499,7 @@
     const missionBtn = step < 3
       ? `<button class="mode big" data-act="mission"><span class="ico">${MISSION[step].icon}</span><div><b>${step === 0 ? "Los geht's" : "Weiter"}: Etappe ${step + 1} von 3</b><br><span>${MISSION[step].text} ${MISSION_LEN} Aufgaben, ca. 3 Minuten.</span></div></button>`
       : `<div class="done-msg"><b>Tagesmission geschafft! 🏆</b><span>Super! Du kannst für heute aufhören. Wenn du magst, übe die stumme Karte.</span></div>`;
-    app.innerHTML = `
-      <div class="top">
-        <div class="hello"><h1>${S.name ? "Hallo " + esc(S.name) + "!" : "Deutschland-Entdecker"}</h1>
-          <div><span class="rank">${r.name}</span> · ${S.xp} Punkte${nr ? ` · noch ${nr.xp - S.xp} bis ${nr.name}` : ""}</div>
-          <div class="xpbar"><i style="width:${pct}%"></i></div></div>
-        ${topChips()}
-        <button class="icon-btn" data-act="badges" aria-label="Abzeichen">🏅</button>
-        <button class="icon-btn" data-act="settings" aria-label="Einstellungen">⚙️</button>
-      </div>
+    app.innerHTML = `${header({ title: "Deutschland-Entdecker", ranks: RANKS, xp: S.xp, chips: topChips() })}
       <div class="home">
         <section class="card"><h2>Meine Karte</h2><div class="minimap" id="mini">${mapMarkup()}</div>
           <div class="legend"><span>Je mehr Sterne, desto bunter die Karte.</span></div>
@@ -327,7 +532,10 @@
   function nameModal() {
     const m = document.createElement("div");
     m.className = "modal";
-    m.innerHTML = `<div class="card"><h1>Willkommen!</h1><p>Wie heißt du? Der Name bleibt nur auf diesem iPad.</p><input type="text" id="nm" placeholder="Dein Vorname" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20"><div class="row"><button class="btn" data-act="savename">Los geht's</button><button class="btn ghost" data-act="skipname">Überspringen</button></div></div>`;
+    m.innerHTML = `<div class="card"><h1>Willkommen!</h1><p>Wie heißt du? Der Name bleibt nur auf diesem iPad.</p><input type="text" id="nm" placeholder="Dein Vorname" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20">
+      <div class="dogrow">${B.dog(0, "happy")}<label for="dn">Das ist dein Hund. Er wächst, wenn du übst. Wie soll er heißen?</label></div>
+      <input type="text" id="dn" value="${esc(pet().name)}" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="14" aria-label="Name des Hundes">
+      <div class="row"><button class="btn" data-act="savename">Los geht's</button><button class="btn ghost" data-act="skipname">Überspringen</button></div></div>`;
     document.body.appendChild(m);
   }
 
@@ -396,8 +604,11 @@
 
   /* ---------- Abzeichen ---------- */
   function renderBadges() {
+    const grid = (list) => `<div class="badges">${list.map((b) => `<div class="badge ${S.badges[b.id] ? "got" : ""}"><div class="medal">${b.icon}</div><div><b>${b.name}</b><small>${b.desc}</small></div></div>`).join("")}</div>`;
+    let groups = [{ id: "de", title: "🗺️ Deutschland", list: BADGES }].concat(FAECH.map((f) => ({ id: f.id, title: f.icon + " " + f.name, list: f.badges || [] })));
+    groups = groups.filter((g) => g.id === S.subject).concat(groups.filter((g) => g.id !== S.subject));
     app.innerHTML = `<div class="results"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Abzeichen</h1></div>
-      <div class="badges">${BADGES.map((b) => `<div class="badge ${S.badges[b.id] ? "got" : ""}"><div class="medal">${b.icon}</div><div><b>${b.name}</b><small>${b.desc}</small></div></div>`).join("")}</div></div>`;
+      ${FAECH.length ? groups.map((g) => `<h2 class="bgroup">${g.title}</h2>${grid(g.list)}`).join("") : grid(BADGES)}</div>`;
   }
 
   /* ================= Spielrunden ================= */
@@ -420,7 +631,10 @@
         q.push({ it, skill });
       });
       add("general", 6); add("neighbors", 4); add("states", 5); add("water", 4); add("mountains", 3);
-      return shuffle(q);
+      const out = shuffle(q);
+      // Tests: bestimmte Frage zuerst (als Schreibfrage, wenn es eine gibt)
+      if (TEST.forceFirst && BY_ID[TEST.forceFirst]) { const it = BY_ID[TEST.forceFirst]; return [{ it, skill: it.skills.includes("write") ? "write" : it.skills[0] }].concat(out.filter((x) => x.it.id !== it.id)).slice(0, out.length); }
+      return out;
     }
     if (mode === "mission") {
       const sk = MISSION[Math.min(2, missionStep())].skill;
@@ -442,7 +656,7 @@
   function gameShell(mode) {
     return `<div class="game">
       <div class="gbar"><button class="icon-btn" data-act="quit" aria-label="Beenden">✕</button>
-        ${mode === "blitz" ? `<div class="timer" style="flex:1"><i id="tm"></i></div>` : `<div class="progress"><i id="pg"></i></div>`}<span class="count" id="cnt"></span>
+        ${mode === "blitz" ? race.html() : `<div class="progress"><i id="pg"></i></div><div class="bossbar" id="bossbar" hidden></div>${gdog()}`}<span class="count" id="cnt"></span>
         <span class="xp" id="xpv"></span></div>
       <div class="stage" id="stage"><div class="mapwrap" id="mapwrap">${mapMarkup()}</div><aside class="panel" id="panel"></aside></div></div>`;
   }
@@ -457,10 +671,10 @@
     const q = buildQueue(mode, topic);
     if (!q.length) return toast("Dazu gibt es hier keine Aufgaben. Wähle ein anderes Thema.");
     view = "game";
-    R = { tok: Math.random(), mode, topic, q, i: 0, results: [], xp: 0, hits: 0, t0: Date.now(), mstep: missionStep() };
+    R = { tok: Math.random(), mode, topic, q, i: 0, results: [], xp: 0, hits: 0, combo: 0, t0: Date.now(), mstep: missionStep() };
     app.innerHTML = gameShell(mode);
     wireGame();
-    if (mode === "blitz") blitzTimer();
+    if (mode === "blitz") { race.setup(R, S.blitzTrace, TEST.blitzMs || 60000); blitzTimer(); }
     showQuestion();
   }
 
@@ -470,7 +684,8 @@
       if (!R || R.tok !== tok) return;
       const left = end - Date.now();
       const bar = $("#tm");
-      if (bar) bar.style.width = Math.max(0, left / 600) + "%";
+      if (bar) bar.style.width = Math.max(0, (left / (TEST.blitzMs || 60000)) * 100) + "%";
+      race.update(R);
       if (left <= 0) { R.lock = true; return finish(); }
       setTimeout(tick, 100);
     };
@@ -478,16 +693,31 @@
   }
 
   function updateBar() {
+    if (R.boss) return bossUI.draw(R);
     let n = R.q.length, done = R.i;
-    if (R.mode === "blank") done = R.q.filter((it) => R.status[it.id] === "ok" || R.status[it.id] === "bad").length;
+    if (R.mode === "blank") done = R.q.filter((it) => R.status[it.id] === "ok" || R.status[it.id] === "bad" || (R.sheet && sheetVal(it))).length;
     const pg = $("#pg"); if (pg) pg.style.width = (done / n) * 100 + "%";
     const c = $("#cnt");
     if (c) c.textContent = R.mode === "blitz" ? "✔ " + R.hits : R.mode === "blank" ? done + " / " + n : Math.min(R.i + 1, n) + " / " + n;
     const x = $("#xpv"); if (x) x.textContent = "+" + R.xp;
   }
 
+  // Boss am Ende einer Etappe: zuerst die Fehler dieser Etappe, sonst Aufgaben aus dem Pool der Etappe
+  function startBoss() {
+    const step = Math.min(2, R.mstep), sk = MISSION[step].skill, max = B.bossHp(step);
+    const seen = new Set();
+    let items = R.results.filter((x) => !x.ok && !seen.has(x.q.it.id) && seen.add(x.q.it.id)).map((x) => x.q.it).slice(0, max);
+    if (items.length < max) items = items.concat(sample(poolFor("all", sk).filter((it) => !items.includes(it)), max - items.length, weightFor(sk)));
+    bossUI.start(R, step);
+    R.q.push(...items.map((it) => ({ it, skill: sk, boss: true })));
+    $("#stage").classList.add("bossfight");
+    showQuestion();
+  }
   function showQuestion() {
-    if (R.i >= R.q.length) return finish();
+    if (R.i >= R.q.length) {
+      if (R.mode === "mission" && bossOn() && !R.boss) return startBoss();
+      return finish();
+    }
     const q = R.q[R.i];
     R.cur = q; R.lock = false; R.waitNext = false; R.attempt = 0; R.onMap = null; R.onPanel = null;
     updateBar();
@@ -506,11 +736,21 @@
   function commit(q, res) {
     const ok = res !== "fail";
     record(q.it, q.skill, res);
-    const gain = (res === "first" ? 10 : res === "second" ? 5 : 0) + (ok && q.skill === "write" ? 5 : 0);
+    let gain = (res === "first" ? 10 : res === "second" ? 5 : 0) + (ok && q.skill === "write" ? 5 : 0);
+    R.combo = res === "first" ? (R.combo || 0) + 1 : 0;
+    if (q.boss) {
+      // Boss-Aufgaben zählen nicht zur Etappe; falsch: der Boss blockt, die Aufgabe kommt wieder
+      if (ok) { gain += 5; if (bossUI.hit(R)) { gain += 20; R.q.length = R.i + 1; } }
+      else { bossUI.block(R); R.q.push({ it: q.it, skill: q.skill, boss: true }); }
+    } else {
+      if (ok) R.hits++;
+      R.results.push({ q, res, ok });
+      if (R.mode === "blitz" && ok) race.hit(R);
+    }
     S.xp += gain; R.xp += gain;
-    if (ok) R.hits++;
-    R.results.push({ q, res, ok });
-    tone(ok ? "ok" : "bad");
+    tone(ok ? "ok" : "bad", R.combo);
+    if (!q.boss) petReact(ok ? (R.combo && R.combo % 5 === 0 ? "flip" : "hop") : "tilt");
+    if (ok && gain) fx.plus($("#fb") && $("#fb").firstChild ? $("#fb") : $("#panel"), $("#xpv"), "+" + gain);
     save();
     updateBar();
     checkBadges();
@@ -668,8 +908,78 @@
     };
   }
   // --- Allgemeines: Schreiben ---
+  // --- Mehrere Antworten: ein Feld pro Antwort, jedes wird für sich geprüft (wie bei ANTON) ---
+  function renderGenMulti(q) {
+    const w = q.it.g.write, need = w.all, n = need.length;
+    $("#panel").innerHTML = `<div class="prompt"><small>Schreiben · ${n} Antworten</small><h2 id="wprompt">${esc(w.q)}</h2></div>${speakBtn(w.q)}
+      <form class="multi" id="mf" autocomplete="off">
+        ${need.map((_, k) => `<div class="mrow" id="mr${k}"><span class="mnum">${k + 1}</span><input id="${k ? "wi" + k : "wi"}" class="mi" type="text" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="${k < n - 1 ? "next" : "done"}" aria-label="Antwort ${k + 1}" placeholder="${k + 1}. Antwort"><span class="mmark" aria-hidden="true"></span></div>`).join("")}
+        <button class="btn" type="submit" id="ws">Prüfen</button>
+      </form><div id="fb"></div><div id="act"></div>`;
+    readAloud(w.q);
+    R.onPanel = sayHandler;
+    const ins = [...document.querySelectorAll("#mf .mi")];
+    setTimeout(() => { try { ins[0].focus({ preventScroll: true }); } catch (e) { /* */ } }, 60);
+    // alles in ein Feld geschrieben ("Nordsee und Ostsee")? Auf die freien Felder verteilen.
+    const spread = () => ins.forEach((inp) => {
+      if (inp.readOnly) return;
+      const parts = splitAnswers(inp.value, need);
+      const free = ins.filter((x) => x !== inp && !x.readOnly && !x.value.trim());
+      if (parts.length < 2 || free.length < parts.length - 1) return;
+      inp.value = parts[0];
+      parts.slice(1).forEach((v, i) => { free[i].value = v; });
+    });
+    // Enter springt ins nächste leere Feld; erst wenn alle voll sind, wird geprüft
+    ins.forEach((inp) => inp.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || R.lock) return;
+      spread();
+      const empty = ins.find((x) => !x.readOnly && !x.value.trim());
+      if (empty && empty !== inp) { e.preventDefault(); empty.focus(); }
+    }));
+    const mark = (k, cls, sym) => { const row = $("#mr" + k); row.classList.remove("ok", "bad"); if (cls) row.classList.add(cls); row.querySelector(".mmark").textContent = sym || ""; };
+    $("#mf").onsubmit = (e) => {
+      e.preventDefault();
+      if (R.lock) { if (R.waitNext) next(); return; }
+      spread();
+      const vals = ins.map((x) => x.value);
+      const empty = ins.filter((x) => !x.readOnly && !x.value.trim());
+      if (empty.length && !R.warned && !probe()) {
+        R.warned = true;
+        fb("hint", `Es ${empty.length === 1 ? "fehlt noch eine Antwort" : `fehlen noch ${empty.length} Antworten`}. Weißt du sie nicht? Dann tippe noch einmal auf Prüfen.`);
+        return empty[0].focus();
+      }
+      R.warned = false;
+      const j = judgeEach(vals, need);
+      j.fields.forEach((f, k) => { if (f.ok) { mark(k, "ok", "✓"); ins[k].readOnly = true; } else mark(k, "bad", "✗"); });
+      const notes = j.fields.map((f, k) => (f.ok && (f.kind === "typo" || f.kind === "spelling") ? diffHtml(vals[k], f.canonical) : "")).join("");
+      if (j.ok) {
+        R.lock = true;
+        fb("ok", pr() + (notes ? ` 👍<small>Kleiner Schreibtipp, so schreibt man es:</small>${notes}` : ""));
+        commit(q, R.attempt === 0 ? "first" : "second");
+        return later(next, notes ? 2400 : 1200);
+      }
+      R.attempt++;
+      const okN = j.fields.filter((f) => f.ok).length;
+      if (probe() || R.attempt >= 2) {
+        // Lösung in die roten Felder
+        R.lock = true; R.waitNext = true;
+        let mi = 0;
+        j.fields.forEach((f, k) => { if (!f.ok) { ins[k].readOnly = true; $("#mr" + k).insertAdjacentHTML("beforeend", `<span class="msol">${esc(j.missing[mi++] || "")}</span>`); } });
+        fb("bad", `${okN} von ${n} richtig. Richtig ist: ${esc(w.show)}`);
+        const ws = $("#ws"); ws.textContent = "Weiter"; ws.classList.add("next");
+        commit(q, "fail");
+        return;
+      }
+      tone("bad");
+      const dup = j.fields.some((f) => f.kind === "dup");
+      fb("hint", `${okN ? `${okN} von ${n} richtig, super!` : "Noch nicht richtig."}${dup ? " Eine Antwort steht doppelt da." : ""} Verbessere ${n - okN === 1 ? "das rote Feld" : "die roten Felder"}.`);
+      const bad = ins.find((x) => !x.readOnly);
+      if (bad) { bad.focus(); bad.select(); }
+    };
+  }
   function renderGenWrite(q) {
     const g = q.it.g, w = g.write;
+    if (w.all) return renderGenMulti(q);
     const inp = writeForm(esc(w.q), w.num ? "Zahl eintippen" : "Antwort eintippen");
     inp.setAttribute("autocapitalize", w.num ? "off" : "words");
     if (w.num) inp.setAttribute("inputmode", "numeric");
@@ -718,21 +1028,28 @@
     closeModal();
     const m = document.createElement("div");
     m.className = "modal";
+    const st = S.blankStyle === "single" ? "single" : "sheet";
     m.innerHTML = `<div class="card"><h2 style="color:var(--text)">Stumme Karte</h2><p class="muted">Auf der Karte stehen Nummern. Schreibe zu jeder Nummer den Namen, wie in der LZK.</p>
+      <div class="seg" role="group" aria-label="Wie möchtest du üben?"><button class="segbtn" data-act="bstyle" data-v="sheet" aria-pressed="${st === "sheet"}">📋 Ganzes Blatt</button><button class="segbtn" data-act="bstyle" data-v="single" aria-pressed="${st === "single"}">1️⃣ Nummer für Nummer</button></div>
+      <p class="muted bsthint">${st === "sheet" ? "Wie in der LZK: alle Nummern auf einmal ausfüllen, dann prüfen." : "Eine Nummer nach der anderen, mit Tipps."}</p>
       <div class="choose">${MAP_CATS.map((c) => `<button class="mode" data-act="blank" data-v="${c}"><b>${CATS[c].name}</b><span>${catItems(c).length} Nummern</span></button>`).join("")}</div>
       <button class="btn ghost" data-act="closemodal">Abbrechen</button></div>`;
     document.body.appendChild(m);
   }
-  function startBlank(cat, onlyIds) {
-    closeModal();
-    // Nummern wie im Lapbook (Gebirge, Gewässer), sonst von Nord nach Süd wie auf einem Arbeitsblatt
+  // Nummern wie im Lapbook (Gebirge, Gewässer), sonst von Nord nach Süd wie auf einem Arbeitsblatt
+  function blankSetup(cat, onlyIds) {
     const items = catItems(cat);
     const lapbook = items.every((it) => BLANK_NUM[it.id]);
     const nums = {};
     if (lapbook) items.forEach((it) => { nums[it.id] = BLANK_NUM[it.id]; });
     else items.slice().sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0]).forEach((it, i) => { nums[it.id] = i + 1; });
     const all = items.slice().sort((a, b) => nums[a.id] - nums[b.id]);
-    const ask = onlyIds ? all.filter((it) => onlyIds.includes(it.id)) : all;
+    return { lapbook, nums, all, ask: onlyIds ? all.filter((it) => onlyIds.includes(it.id)) : all };
+  }
+  function startBlank(cat, onlyIds) {
+    closeModal();
+    if (S.blankStyle !== "single") return startSheet(cat, onlyIds);
+    const { lapbook, nums, all, ask } = blankSetup(cat, onlyIds);
     view = "game";
     R = { tok: Math.random(), mode: "blank", cat, all, nums, q: ask, queue: ask.map((it) => it.id), status: {}, results: [], xp: 0, hits: 0, t0: Date.now(), i: 0, onlyIds };
     if (onlyIds) all.forEach((it) => { if (!onlyIds.includes(it.id)) R.status[it.id] = "known"; });
@@ -777,10 +1094,12 @@
       const n = R.nums[it.id], st = R.status[it.id], cur = it.id === R.cur && !blankDone(it.id);
       const [x, y] = it.label;
       let s = `<g class="num ${cur ? "cur" : st || "open"}" data-num="${it.id}"><circle cx="${x}" cy="${y}" r="${cur ? 21 : 16}"/><text x="${x}" y="${y + 6}">${n}</text></g>`;
-      if (st === "ok" || st === "bad" || st === "known") { const [tx, ty] = textAt(it); s += `<text class="numlab ${st}" x="${tx}" y="${(LABEL_SHIFT[it.id] ? ty : y) + 36}">${esc(it.name)}</text>`; }
+      const [tx, ty] = textAt(it), ly = (LABEL_SHIFT[it.id] ? ty : y) + 36;
+      if (st === "ok" || st === "bad" || st === "known") s += `<text class="numlab ${st}" x="${tx}" y="${ly}">${esc(it.name)}</text>`;
+      else if (R.sheet) { const v = sheetVal(it); if (v) s += `<text class="numlab typed" x="${tx}" y="${ly}">${esc(v)}</text>`; }
       return s;
     }).join("");
-    $("#bgrid").innerHTML = R.all.map((it) => `<button class="nb-cell ${it.id === R.cur && !blankDone(it.id) ? "cur" : R.status[it.id] || "open"}" data-a="jump" data-id="${it.id}" ${blankDone(it.id) ? "disabled" : ""}>${R.nums[it.id]}</button>`).join("");
+    if ($("#bgrid")) $("#bgrid").innerHTML = R.all.map((it) => `<button class="nb-cell ${it.id === R.cur && !blankDone(it.id) ? "cur" : R.status[it.id] || "open"}" data-a="jump" data-id="${it.id}" ${blankDone(it.id) ? "disabled" : ""}>${R.nums[it.id]}</button>`).join("");
   }
   function renderBlankAnswer() {
     const bank = S.blankMode === "bank";
@@ -840,6 +1159,150 @@
     fb("hint", wrongTip(it, j.kind));
     inp.select();
   }
+  /* ---------- Stumme Karte als ganzes Blatt: alle Nummern auf einmal, dann prüfen ---------- */
+  const sheetIn = (id) => $("#si-" + id);
+  const sheetVal = (it) => { const i = sheetIn(it.id); return i ? i.value.trim() : ""; };
+  function startSheet(cat, onlyIds) {
+    const { lapbook, nums, all, ask } = blankSetup(cat, onlyIds);
+    view = "game";
+    R = { tok: Math.random(), mode: "blank", sheet: true, cat, all, nums, q: ask, status: {}, results: [], xp: 0, hits: 0, combo: 0, t0: Date.now(), i: 0, onlyIds, attempt: 0, cur: null };
+    if (onlyIds) all.forEach((it) => { if (!onlyIds.includes(it.id)) R.status[it.id] = "known"; });
+    app.innerHTML = gameShell("blank");
+    wireGame();
+    $("#stage").classList.add("sheet");
+    const svg = $(".stage .map");
+    svg.classList.toggle("show-mtn", cat === "mountains");
+    svg.classList.add("focus", "blankmap");
+    $("#panel").innerHTML = `<div class="prompt"><small>Stumme Karte · Ganzes Blatt · ${CATS[cat].name}${lapbook ? " · Nummern wie im Lapbook" : ""}</small><h2>Schreibe zu jeder Nummer den Namen.</h2></div>
+      <div class="seg" role="group" aria-label="Antwortart"><button data-a="sm" data-v="write" class="segbtn" aria-pressed="false">✏️ Schreiben</button><button data-a="sm" data-v="bank" class="segbtn" aria-pressed="false">🔤 Wortkasten</button></div>
+      <div id="fb"></div>
+      <form class="sheetlist" id="sf" autocomplete="off">
+        <div class="srows">${ask.map((it) => `<div class="srow" id="sr-${it.id}"><button type="button" class="numbadge" data-a="srow" data-id="${it.id}" aria-label="Nummer ${nums[it.id]} auf der Karte zeigen">${nums[it.id]}</button><input id="si-${it.id}" data-id="${it.id}" type="text" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="next" aria-label="Nummer ${nums[it.id]}"><span class="smark" aria-hidden="true"></span></div>`).join("")}</div>
+        <div id="sbank"></div>
+        <div class="sfoot"><button class="btn" type="submit" id="ss">Prüfen</button></div>
+      </form>`;
+    R.onPanel = sheetPanel;
+    R.onMap = (e) => { const n = e.target.closest && e.target.closest("[data-num]"); if (n && sheetIn(n.dataset.num)) sheetIn(n.dataset.num).focus(); };
+    ask.forEach((it) => {
+      const inp = sheetIn(it.id);
+      inp.addEventListener("focus", () => sheetCur(it.id));
+      inp.addEventListener("input", () => { $("#sr-" + it.id).classList.remove("wrong"); drawNums(); updateBar(); });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sheetAdvance(it.id, true); } });
+    });
+    $("#sf").onsubmit = (e) => { e.preventDefault(); sheetCheck(); };
+    sheetMode();
+    R.cur = ask[0] && ask[0].id;
+    drawNums(); updateBar();
+    readAloud("Schreibe zu jeder Nummer den Namen.");
+  }
+  // gewählte Nummer: Gebiet leuchtet, Nummer pulsiert
+  function sheetCur(id) {
+    if (!R || !R.sheet) return;
+    R.cur = id;
+    clearHL(); highlight(BY_ID[id]);
+    document.querySelectorAll(".srow").forEach((r) => r.classList.toggle("cur", r.id === "sr-" + id));
+    drawNums();
+  }
+  // nächstes leeres Feld; sind alle voll, wird geprüft (Enter)
+  function sheetAdvance(fromId, checkWhenFull) {
+    const open = R.q.filter((it) => R.status[it.id] !== "ok" && R.status[it.id] !== "bad");
+    const k = open.findIndex((it) => it.id === fromId);
+    const order = open.slice(k + 1).concat(open.slice(0, Math.max(0, k)));
+    const next = order.find((it) => !sheetVal(it));
+    if (next) { sheetIn(next.id).focus(); sheetIn(next.id).scrollIntoView({ block: "nearest" }); return; }
+    if (checkWhenFull) sheetCheck();
+  }
+  // Schreiben oder Wortkasten (Wortkasten: keine Tastatur, Namen antippen)
+  function sheetMode() {
+    const bank = S.blankMode === "bank";
+    document.querySelectorAll('[data-a="sm"]').forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.v === "bank") === bank)));
+    R.q.forEach((it) => { const i = sheetIn(it.id); if (R.status[it.id] !== "ok" && R.status[it.id] !== "bad") i.readOnly = bank; i.inputMode = bank ? "none" : "text"; });
+    const words = R.all.slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
+    $("#sbank").innerHTML = bank ? `<div class="wordbank">${words.map((it) => `<button type="button" class="wchip" data-a="sword" data-name="${esc(it.name)}">${esc(it.name)}</button>`).join("")}</div>` : "";
+    sheetChips();
+  }
+  const sheetChips = () => {
+    const used = new Set(R.q.map((it) => sheetVal(it)).filter(Boolean));
+    document.querySelectorAll('[data-a="sword"]').forEach((c) => c.classList.toggle("used", used.has(c.dataset.name)));
+  };
+  function sheetRecord(it, res) {
+    const ok = res !== "fail", skill = S.blankMode === "bank" ? "choice" : "write";
+    record(it, skill, res);
+    const gain = (res === "first" ? 10 : res === "second" ? 5 : 0) + (ok && skill === "write" ? 5 : 0);
+    S.xp += gain; R.xp += gain;
+    if (ok) R.hits++;
+    R.results.push({ q: { it, skill }, res, ok });
+    return gain;
+  }
+  function sheetCheck() {
+    if (!R || !R.sheet) return;
+    if (R.lock) return R.waitNext ? finish() : undefined;
+    const rows = R.q.filter((it) => R.status[it.id] !== "ok");
+    const empty = rows.filter((it) => !sheetVal(it));
+    if (empty.length && !R.warned) {
+      R.warned = true;
+      fb("hint", `Noch ${empty.length} ${empty.length === 1 ? "Feld ist" : "Felder sind"} leer. Weißt du ${empty.length === 1 ? "es" : "sie"} nicht? Dann tippe noch einmal auf Prüfen.`);
+      sheetIn(empty[0].id).focus();
+      return;
+    }
+    R.warned = false;
+    R.attempt++;
+    const final = R.attempt >= 2;
+    let gain = 0;
+    const notes = [];
+    for (const it of rows) {
+      const inp = sheetIn(it.id), row = $("#sr-" + it.id), v = inp.value;
+      const j = judge(v, nameList(it), othersOf(it));
+      row.classList.remove("wrong", "bad");
+      if (j.ok) {
+        R.status[it.id] = "ok"; gain += sheetRecord(it, R.attempt === 1 ? "first" : "second");
+        row.classList.add("ok"); inp.readOnly = true; row.querySelector(".smark").textContent = "✓";
+        if (j.kind === "typo" || j.kind === "spelling") notes.push(`<b>${R.nums[it.id]}:</b>${diffHtml(v, j.canonical)}`);
+      } else if (final) {
+        R.status[it.id] = "bad"; sheetRecord(it, "fail");
+        row.classList.add("bad"); inp.readOnly = true; row.querySelector(".smark").textContent = "✗";
+        row.insertAdjacentHTML("beforeend", `<span class="ssol">${esc(it.name)}</span>`);
+      } else { row.classList.add("wrong"); row.querySelector(".smark").textContent = "✗"; }
+    }
+    const n = R.q.length, okN = R.q.filter((it) => R.status[it.id] === "ok").length;
+    clearHL(); drawNums(); updateBar(); save(); checkBadges();
+    if (gain) fx.plus($("#ss"), $("#xpv"), "+" + gain);
+    const tip = notes.length ? `<small>Kleiner Schreibtipp:</small>${notes.join("")}` : "";
+    if (okN === n) {
+      R.lock = true; R.waitNext = true;
+      fb("ok", `Alles richtig! 🎉${tip}`);
+      tone("win"); confetti(60);
+      $("#ss").textContent = "Zur Auswertung";
+      return;
+    }
+    if (final) {
+      R.lock = true; R.waitNext = true;
+      fb("bad", `${okN} von ${n} richtig. Bei den roten Nummern steht jetzt die Lösung.${tip}`);
+      tone("bad");
+      $("#ss").textContent = "Zur Auswertung";
+      return;
+    }
+    tone(okN ? "ok" : "bad");
+    fb("hint", `${okN} von ${n} richtig${okN ? ", super" : ""}! Verbessere die roten Felder und prüfe noch einmal.${tip}`);
+    const firstBad = R.q.find((it) => R.status[it.id] !== "ok");
+    if (firstBad) { sheetIn(firstBad.id).focus(); if (S.blankMode !== "bank") sheetIn(firstBad.id).select(); }
+  }
+  function sheetPanel(b) {
+    const a = b.dataset.a;
+    if (a === "sm") { S.blankMode = b.dataset.v; save(); sheetMode(); if (R.cur && sheetIn(R.cur)) sheetIn(R.cur).focus(); return; }
+    if (a === "srow") { const i = sheetIn(b.dataset.id); if (i) i.focus(); return; }
+    if (a === "sword") {
+      if (R.lock || !R.cur || R.status[R.cur] === "ok") return;
+      const i = sheetIn(R.cur);
+      // den Namen aus einem anderen (noch offenen) Feld wegnehmen: jeder Name nur einmal
+      R.q.forEach((it) => { const o = sheetIn(it.id); if (o !== i && R.status[it.id] !== "ok" && o.value === b.dataset.name) o.value = ""; });
+      i.value = b.dataset.name;
+      $("#sr-" + R.cur).classList.remove("wrong");
+      sheetChips(); drawNums(); updateBar();
+      sheetAdvance(R.cur, false);
+    }
+  }
+
   function blankPanel(b) {
     const a = b.dataset.a;
     if (a === "bm") { S.blankMode = b.dataset.v; save(); if (!R.lock) renderBlankAnswer(); else document.querySelectorAll(".segbtn").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.v === S.blankMode))); return; }
@@ -877,7 +1340,7 @@
       r.grade = gradeFor(r.pct);
       S.probes.push({ date: dayKey(), pct: r.pct, grade: r.grade });
     }
-    if (r.mode === "blitz" && r.hits > S.blitzBest) { r.record = true; S.blitzBest = r.hits; }
+    if (r.mode === "blitz" && r.hits > S.blitzBest) { r.record = true; S.blitzBest = r.hits; S.blitzTrace = (r.trace || []).slice(); }
     if (r.mode === "mission") {
       const step = Math.min(3, r.mstep + 1);
       S.mission = { day: dayKey(), step };
@@ -885,6 +1348,9 @@
       r.newStep = step;
     }
     if (r.mode === "blank" && n === r.all.length && ok === n) S.blankPerfect = true;
+    // Blöcke für die Bauprojekte des Hundes
+    const blocks = r.mode === "mission" ? 3 : r.mode === "probe" || r.record ? 2 : r.mode === "blitz" ? 0 : n ? 1 : 0;
+    r.loot = blocks ? giveBlocks(blocks) : null;
     save();
     checkBadges();
     view = "results";
@@ -935,7 +1401,8 @@
       hint = `<div class="card pausehint"><b>Du übst schon eine Weile, super!</b><span>Zeit für eine kurze Pause?</span><button class="btn ghost" data-act="pause">Bewegungspause (20 s)</button></div>`;
     }
     const li = (it) => `<li>${esc(it.name)}${it.cat === "general" ? "" : ` <span class="muted">(${CATS[it.cat].short})</span>`}</li>`;
-    app.innerHTML = `<div class="results"><div class="card hero"><h1>${head}</h1><div class="score">${big}</div><p class="muted">${sub}</p>${extra}</div>
+    const gains = [bossUI.line(r.boss), r.loot ? r.loot.text : ""].filter(Boolean);
+    app.innerHTML = `<div class="results"><div class="card hero"><h1>${head}</h1><div class="score">${big}</div><p class="muted">${sub}</p>${gains.length ? `<div class="gains">${gains.map((g) => `<div>${g}</div>`).join("")}</div>` : ""}${extra}</div>
       ${hint}
       ${r.mode === "blank" ? "" : `<div class="listcols"><div class="card"><h2>Das kannst du schon</h2><ul>${good.map(li).join("") || "<li class='muted'>noch nichts</li>"}</ul></div>
       <div class="card"><h2>Das üben wir noch</h2><ul>${todo.map(li).join("") || "<li class='muted'>alles richtig 🎉</li>"}</ul></div></div>`}
@@ -954,7 +1421,15 @@
   }
 
   /* ================= Eltern-Übersicht ================= */
+  let ptab = "de";
+  const parentTabs = () => FAECH.length ? `<div class="seg ptabs" role="group" aria-label="Fach">${[{ id: "de", icon: "🗺️", name: "Deutschland" }].concat(FAECH).map((f) => `<button class="segbtn" data-act="ptab" data-v="${f.id}" aria-pressed="${ptab === f.id}">${f.icon} ${esc(f.name)}</button>`).join("")}</div>` : "";
   function renderParents() {
+    const fach = ptab !== "de" && fachOf(ptab);
+    if (fach) {
+      app.innerHTML = `<div class="results parents"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Eltern-Übersicht</h1></div>${parentTabs()}${fach.parents()}</div>`;
+      fach.bindParents();
+      return;
+    }
     const cats = ["states", "neighbors", "water", "mountains", "general"];
     const all = catStars("all");
     const ready = all.max ? Math.round((all.got / all.max) * 100) : 0;
@@ -970,7 +1445,7 @@
     const miss = (it) => it.skills.filter((sk) => lvl(it.id, sk) < 1).map((sk) => SKILL_NAME[sk]).join(", ");
     const cell = (it, sk) => it.skills.includes(sk) ? (lvl(it.id, sk) >= 1 ? `<td class="yes">✓</td>` : `<td class="no">–</td>`) : `<td class="na"></td>`;
     const totalMin = Object.values(S.mins).reduce((a, b) => a + b, 0);
-    app.innerHTML = `<div class="results parents"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Eltern-Übersicht</h1></div>
+    app.innerHTML = `<div class="results parents"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Eltern-Übersicht</h1></div>${parentTabs()}
       <section class="card"><h2>Bereit für die LZK</h2>
         <div class="ready"><div class="big-pct">${ready} %</div><p class="muted">Anteil aller Sterne. Ein Begriff sitzt sicher, wenn er ihn auswählen, auf der Karte finden und schreiben kann (3 Sterne).</p></div>
         <div class="bars">${cats.map((c) => { const s = catStars(c); const p = s.max ? Math.round((s.got / s.max) * 100) : 0; return `<div class="barrow"><span>${CATS[c].name}</span><div class="bar"><i style="width:${p}%"></i></div><b>${s.full}/${s.n} sicher</b></div>`; }).join("")}</div>
@@ -990,6 +1465,7 @@
           <label for="calm">Ruhiger Modus (kein Konfetti, kein Blinken, leisere Töne)</label><input type="checkbox" id="calm" ${S.calm ? "checked" : ""}>
           <label for="ar">Fragen automatisch vorlesen</label><input type="checkbox" id="ar" ${S.autoRead ? "checked" : ""}>
           <label for="bz">Blitzrunde (mit Zeitdruck) anbieten</label><input type="checkbox" id="bz" ${S.showBlitz ? "checked" : ""}>
+          <label for="boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label><input type="checkbox" id="boss" ${bossOn() ? "checked" : ""}>
           <label for="lzk">Datum der LZK</label><input type="date" id="lzk" value="${esc(S.lzkDate || LZK_DATE)}">
         </div>
         <p class="tip">Tipp bei Konzentrationsschwierigkeiten: lieber 2 bis 3 kurze Einheiten am Tag (eine Tagesmission dauert etwa 10 Minuten) als eine lange. Die Bewegungspause zwischen den Etappen hilft beim Weitermachen.</p>
@@ -1000,6 +1476,7 @@
     bind("calm", (el) => { S.calm = el.checked; });
     bind("ar", (el) => { S.autoRead = el.checked; });
     bind("bz", (el) => { S.showBlitz = el.checked; });
+    bind("boss", (el) => { S.bossOn = el.checked; });
     bind("lzk", (el) => { if (/^\d{4}-\d{2}-\d{2}$/.test(el.value)) S.lzkDate = el.value; });
   }
 
@@ -1020,7 +1497,7 @@
     let t = null, t0 = 0, raf2 = 0;
     const stop = () => { clearTimeout(t); cancelAnimationFrame(raf2); t = null; $("#gfill").style.width = "0"; };
     const grow = () => { $("#gfill").style.width = Math.min(100, ((Date.now() - t0) / ms) * 100) + "%"; if (t) raf2 = requestAnimationFrame(grow); };
-    gate.addEventListener("pointerdown", (e) => { e.preventDefault(); t0 = Date.now(); t = setTimeout(() => { stop(); S.name = ($("#nm2").value || "").trim(); save(); go("parents"); }, ms); grow(); });
+    gate.addEventListener("pointerdown", (e) => { e.preventDefault(); t0 = Date.now(); t = setTimeout(() => { stop(); S.name = ($("#nm2").value || "").trim(); save(); ptab = fachOf(S.subject) ? S.subject : "de"; go("parents"); }, ms); grow(); });
     ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => gate.addEventListener(ev, stop));
   }
 
@@ -1034,11 +1511,15 @@
       case "mode": startRound(v); break;
       case "mission": if (missionStep() < 3) startRound("mission"); else go("home"); break;
       case "blankpick": blankChooser(); break;
+      case "bstyle": S.blankStyle = v === "single" ? "single" : "sheet"; save(); blankChooser(); break;
       case "blank": startBlank(v); break;
       case "blankwrong": startBlank(R.cat, R.q.filter((it) => R.status[it.id] === "bad").map((it) => it.id)); break;
       case "closemodal": closeModal(); break;
       case "pause": startPause(R && R.mode === "mission" ? "mission" : null); break;
-      case "pausedone": if (pauseNext === "mission" && missionStep() < 3) startRound("mission"); else go("home"); break;
+      case "pausedone":
+        if (typeof pauseNext === "function") { const fn = pauseNext; pauseNext = null; fn(); }
+        else if (pauseNext === "mission" && missionStep() < 3) startRound("mission"); else go("home");
+        break;
       case "discover": D = null; go("discover"); break;
       case "layer": D.layer = v; D.sel = null; renderDiscover(); break;
       case "badges": go("badges"); break;
@@ -1047,13 +1528,18 @@
       case "again": if (R.mode === "blank") startBlank(R.cat); else if (R.mode === "mission") startRound(missionStep() < 3 ? "mission" : "mix"); else startRound(R.mode); break;
       case "say": say(v); break;
       case "settings": settingsModal(); break;
-      case "savename": S.name = ($("#nm").value || "").trim(); S.askedName = true; save(); closeModal(); renderHome(); break;
+      case "savename": S.name = ($("#nm").value || "").trim(); pet().name = ($("#dn") && $("#dn").value || "").trim() || pet().name; S.askedName = true; save(); closeModal(); renderHome(); break;
+      case "pet": go("pet"); break;
+      case "petpet": petPet(); break;
       case "skipname": S.askedName = true; save(); closeModal(); break;
       case "savesettings": S.name = ($("#nm2").value || "").trim(); S.sound = $("#snd").checked; S.speak = $("#spk").checked; save(); closeModal(); renderHome(); break;
       case "reset":
         if (b.dataset.sure) { S = defaults(); S.askedName = true; save(); go("home"); }
         else { b.dataset.sure = "1"; b.textContent = "Wirklich alles löschen? Noch einmal tippen."; b.classList.add("danger"); }
         break;
+      case "subject": if (v === "de" || fachOf(v)) { S.subject = v; save(); go("home"); } break;
+      case "ptab": ptab = v; renderParents(); window.scrollTo(0, 0); break;
+      default: { const f = fachFor(act); if (f) f.act(act, v, b); }
     }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "nm") document.querySelector('[data-act="savename"]').click(); });
@@ -1078,7 +1564,21 @@
   addEventListener("resize", fitMap);
   window.__DE_fit = fitMap;
 
+  /* ================= Fächer ================= */
+  // Ein Fach ist eine Fabrik in window.DE_FAECHER: (core) => ({ id, prefix, name, icon, home, render, act, badges, activeOn, parents, bindParents }).
+  // Ansichten und data-act des Fachs beginnen mit seinem prefix (z. B. "m-").
+  const core = {
+    get S() { return S; }, get view() { return view; }, app, TEST,
+    save, go, $, esc, tone, say, confetti, toast, dayKey, streak, startPause, addTime, checkBadges, header, closeModal, gradeFor, sample, shuffle,
+    // Begleiter, Boss, Rennen, Effekte: für alle Fächer gleich
+    fx, bossUI, bossOn, race, gdog, petReact, giveBlocks, totalXp,
+    // Pausen-Hinweis nach 15 Minuten Übungszeit (einmal pro Sitzung)
+    pauseHint() { if (sessionMin >= (TEST.pauseAfterMin || 15) && !pauseHinted) { pauseHinted = true; return true; } return false; },
+  };
+  FAECH = (window.DE_FAECHER || []).map((make) => make(core));
+  if (S.subject !== "de" && !fachOf(S.subject)) S.subject = "de";
+
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS };
+  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp };
   render();
 })();
