@@ -229,10 +229,10 @@ async function deStep(p, right = true) {
   // Spielstand überlebt: Hauptschlüssel weg -> zweite Kopie; beide weg -> IndexedDB-Spiegel
   await p.click('.kind[data-v="panda"]');
   await p.waitForTimeout(400);
-  await ev(p, "(localStorage.removeItem('deutschland-entdecker-v1'), true)");
+  await ev(p, "(window.__DE.skipSave = true, localStorage.removeItem('deutschland-entdecker-v1'), true)");
   await p.reload(); await p.waitForSelector("#app *");
   check((await S(p)).pet.kind === "panda", "Hauptschlüssel gelöscht: Stand kommt aus der zweiten Kopie");
-  await ev(p, "(localStorage.removeItem('deutschland-entdecker-v1'), localStorage.removeItem('deutschland-entdecker-v1-bak'), true)");
+  await ev(p, "(window.__DE.skipSave = true, localStorage.removeItem('deutschland-entdecker-v1'), localStorage.removeItem('deutschland-entdecker-v1-bak'), true)");
   await p.reload();
   await p.waitForFunction(() => window.__DE && window.__DE.S.pet.kind === "panda", null, { timeout: 6000 }).catch(() => {});
   check((await S(p)).pet.kind === "panda", "Beide Schlüssel gelöscht: Stand kommt aus IndexedDB zurück");
@@ -241,7 +241,7 @@ async function deStep(p, right = true) {
   await p.click('[data-act="pet"]');
   await p.click('.kind[data-v="tiger"]');
   await p.waitForTimeout(500);
-  await ev(p, "(localStorage.setItem('deutschland-entdecker-v1', '{kaputt'), localStorage.setItem('deutschland-entdecker-v1-bak', '5'), true)");
+  await ev(p, "(window.__DE.skipSave = true, localStorage.setItem('deutschland-entdecker-v1', '{kaputt'), localStorage.setItem('deutschland-entdecker-v1-bak', '5'), true)");
   await p.reload();
   await p.waitForFunction(() => window.__DE && window.__DE.S.pet && window.__DE.S.pet.kind === "tiger", null, { timeout: 8000 }).catch(() => {});
   await p.click('[data-act="skipname"]').catch(() => {});

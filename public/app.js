@@ -1707,7 +1707,10 @@
   if (S.subject !== "de" && !fachOf(S.subject)) S.subject = "de";
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp, save, KEY };
+  window.__DE = {
+    get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp, save, KEY,
+    get skipSave() { return skipSave; }, set skipSave(v) { skipSave = !!v; },
+  };
   // Einmaliges Geschenk nach dem verlorenen Spielstand: 5000 Punkte und 24 Stunden dreifache Punkte zum Aufholen
   if (!S.gift2 && (!window.__DE_TEST || TEST.gift)) {
     S.gift = (S.gift || 0) + 5000; S.gift2 = true;

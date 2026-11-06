@@ -47,7 +47,7 @@ check(after.mxp === 120 && after.kxp === 55 && after.ktot === 12, "Kopfrechnen- 
 // „Update“: localStorage bleibt, auch wenn Service-Worker-Cache-Name neu wäre (KEY unverändert)
 const bak = await p.evaluate(() => localStorage.getItem("deutschland-entdecker-v1-bak"));
 check(!!bak && bak.includes('"kind":"panda"') && bak.includes('"xp":888'), "Zweite Kopie enthält denselben Stand");
-await p.evaluate(() => { localStorage.removeItem("deutschland-entdecker-v1"); });
+await p.evaluate(() => { window.__DE.skipSave = true; localStorage.removeItem("deutschland-entdecker-v1"); });
 await p.reload();
 await p.waitForSelector("#app *");
 const fromBak = await p.evaluate(() => ({ xp: window.__DE.S.xp, kind: window.__DE.S.pet.kind, name: window.__DE.S.name }));
