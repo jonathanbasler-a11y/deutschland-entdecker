@@ -419,6 +419,7 @@ body.calm .gbar .combo.hot, body.calm .mans.empty::after { animation: none; }
 
 /* ================= Begleiter: Pixel-Hund ================= */
 .dog { display: block; width: 100%; height: auto; overflow: visible; image-rendering: pixelated; }
+.dog.emo { image-rendering: auto; }
 .dog .f2, .dog .l2 { visibility: hidden; }
 /* wedeln: zwei Bilder im Wechsel */
 .happy .dog .f1, .dog.happy .f1 { animation: frameA .36s steps(1) infinite; }

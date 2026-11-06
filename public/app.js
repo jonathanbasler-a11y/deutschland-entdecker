@@ -18,8 +18,35 @@
     pet: { name: "Pixel", blocks: 0, bosses: {}, lastGreet: "", petted: 0, stage: 0, gear: 0 }, bossOn: true, blitzTrace: [],
   });
   let S = defaults();
-  try { const raw = JSON.parse(localStorage.getItem(KEY) || "null"); if (raw) S = Object.assign(defaults(), raw); } catch (e) { /* ohne Speicher weiter */ }
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* egal */ } };
+  // Spielstand mehrfach sichern: Hauptschlüssel, zweite Kopie, IndexedDB-Spiegel, dazu Sicherungsdatei (Eltern-Übersicht)
+  const BAK = KEY + "-bak";
+  const readKey = (k) => { try { const t = localStorage.getItem(k); if (!t) return null; const o = JSON.parse(t); return o && typeof o === "object" && !Array.isArray(o) ? o : null; } catch (e) { try { localStorage.setItem(k + "-defekt", localStorage.getItem(k)); } catch (e2) { /* egal */ } return null; } };
+  { const raw = readKey(KEY) || readKey(BAK); if (raw) S = Object.assign(defaults(), raw); }
+  const idb = (fn) => { try { const q = indexedDB.open("de-entdecker-save", 1); q.onupgradeneeded = () => q.result.createObjectStore("s"); q.onsuccess = () => { try { fn(q.result); } catch (e) { /* egal */ } }; } catch (e) { /* ohne IndexedDB weiter */ } };
+  const save = () => {
+    let t;
+    try { t = JSON.stringify(S); localStorage.setItem(KEY, t); localStorage.setItem(BAK, t); } catch (e) { /* egal */ }
+    if (t) idb((db) => db.transaction("s", "readwrite").objectStore("s").put(t, "state"));
+  };
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* egal */ }
+  // Speicher des Browsers leer, aber IndexedDB hat noch den Stand: wiederherstellen (einmal pro Sitzung)
+  if (!localStorage.getItem(KEY) && !localStorage.getItem(BAK) && !sessionStorage.getItem("de-restored")) {
+    idb((db) => { const g = db.transaction("s").objectStore("s").get("state"); g.onsuccess = () => { if (g.result) { try { localStorage.setItem(KEY, g.result); sessionStorage.setItem("de-restored", "1"); location.reload(); } catch (e) { /* egal */ } } }; });
+  }
+  // Sicherungsdatei laden und speichern
+  const backupDownload = () => {
+    const blob = new Blob([JSON.stringify(S)], { type: "application/json" }), a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `entdecker-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+  const backupLoad = (file) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      try { const o = JSON.parse(fr.result); if (!o || typeof o !== "object" || Array.isArray(o) || !("xp" in o || "pet" in o || "kompass" in o)) throw new Error("kein Spielstand"); localStorage.setItem(KEY, JSON.stringify(o)); localStorage.setItem(BAK, JSON.stringify(o)); location.reload(); }
+      catch (e) { toast("Diese Datei ist keine Sicherung."); }
+    };
+    fr.readAsText(file);
+  };
 
   // Weitere Fächer (z. B. Kopfrechnen) melden sich über window.DE_FAECHER an, siehe unten "Fächer".
   let FAECH = [];
@@ -309,7 +336,7 @@
     let bubble = "";
     if (S.askedName && p.lastGreet !== dayKey()) { p.lastGreet = dayKey(); save(); bubble = `<span class="bubble">Wuff! Da bist du ja${S.name ? ", " + esc(S.name) : ""}!</span>`; }
     else if (!happy) bubble = `<span class="bubble soft">Ich warte auf dich!</span>`;
-    return `<button class="petw ${happy ? "happy" : "wait"}" data-act="pet" aria-label="Mein ${esc(B.kindOf(p.kind).word)} ${esc(p.name)}">${B.dog(xp, "", "", p.kind)}<span class="pinfo"><b>${esc(p.name)}</b><small>${g.name}</small><span class="pbar"><i style="width:${g.pct}%"></i></span></span>${bubble}</button>`;
+    return `<button class="petw ${happy ? "happy" : "wait"}" data-act="pet" aria-label="Mein ${esc(B.kindOf(p.kind).word)} ${esc(p.name)}">${B.dog(xp, "", "", p.kind, p.worn)}<span class="pinfo"><b>${esc(p.name)}</b><small>${g.name}</small><span class="pbar"><i style="width:${g.pct}%"></i></span></span>${bubble}</button>`;
   }
   // kleiner Hund in der Leiste oben: hüpft, macht Salto, legt den Kopf schief
   function petReact(kind) {
@@ -320,7 +347,7 @@
     void d.offsetWidth;
     d.classList.add(kind);
   }
-  const gdog = () => `<span class="gdog" id="gdog">${B.dog(totalXp(), "run", "", pet().kind)}</span>`;
+  const gdog = () => `<span class="gdog" id="gdog">${B.dog(totalXp(), "run", "", pet().kind, pet().worn)}</span>`;
 
   function renderPet() {
     const p = pet(), xp = totalXp(), g = B.growth(xp, p.kind), gear = B.gearOf(xp), bd = B.building(p.blocks || 0);
@@ -332,7 +359,7 @@
     app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein ${esc(K.word)}</h1></div>
       <section class="card petstage">
         <div class="room" style="background:${B.roomOf(p.room).bg}">
-        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind)}${(p.worn || []).map((id) => { const a = B.ACC.find((x) => x.id === id); return a ? `<span class="acc acc-${a.slot}" aria-hidden="true">${a.icon}</span>` : ""; }).join("")}</button>
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind, p.worn)}${(p.kind && p.kind !== "hund" ? [] : p.worn || []).map((id) => { const a = B.ACC.find((x) => x.id === id); return a ?`<span class="acc acc-${a.slot}" aria-hidden="true">${a.icon}</span>` : ""; }).join("")}</button>
         <div class="decor" aria-hidden="true">${(p.decor || []).map((id) => { const d = B.DECOR.find((x) => x.id === id); return d ? `<span>${d.icon}</span>` : ""; }).join("")}</div></div>
         <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
           <div class="pbar big"><i style="width:${g.pct}%"></i></div>
@@ -1531,8 +1558,12 @@
           <label for="lzk">Datum der LZK</label><input type="date" id="lzk" value="${esc(S.lzkDate || LZK_DATE)}">
         </div>
         <p class="tip">Tipp bei Konzentrationsschwierigkeiten: lieber 2 bis 3 kurze Einheiten am Tag (eine Tagesmission dauert etwa 10 Minuten) als eine lange. Die Bewegungspause zwischen den Etappen hilft beim Weitermachen.</p>
+        <h2 style="margin-top:14px">Sicherung</h2>
+        <p class="muted">Der Spielstand liegt auf diesem Gerät im Browser und wird zusätzlich doppelt gesichert. Speichere ab und zu eine Sicherungsdatei (landet in „Dateien“). Mit „Sicherung laden“ kommt alles zurück, auch auf einem anderen Gerät.</p>
+        <div class="row"><button class="btn" data-act="backup">Sicherung speichern</button><label class="btn ghost" for="bkfile" role="button" tabindex="0">Sicherung laden</label><input type="file" id="bkfile" accept=".json,application/json" hidden></div>
         <button class="linkbtn" data-act="reset" id="rst">Alles zurücksetzen</button>
       </section></div>`;
+    const bk = $("#bkfile"); if (bk) bk.onchange = () => { if (bk.files && bk.files[0]) backupLoad(bk.files[0]); };
     const bind = (id, fn) => { const el = $("#" + id); if (el) el.onchange = () => { fn(el); save(); applyCalm(); }; };
     bind("rl", (el) => { S.roundLen = +el.value; });
     bind("calm", (el) => { S.calm = el.checked; });
@@ -1598,6 +1629,7 @@
       case "buy": petShop(...v.split(":")); break;
       case "wear": petWear(v); break;
       case "room": if (B.ROOMS.some((x) => x.id === v) && (B.roomOf(v).price === 0 || (pet().rooms || []).includes(v))) { pet().room = v; save(); renderPet(); } break;
+      case "backup": backupDownload(); toast("Sicherung gespeichert."); break;
       case "skipname": S.askedName = true; save(); closeModal(); break;
       case "savesettings": S.name = ($("#nm2").value || "").trim(); S.sound = $("#snd").checked; S.speak = $("#spk").checked; save(); closeModal(); renderHome(); break;
       case "reset":

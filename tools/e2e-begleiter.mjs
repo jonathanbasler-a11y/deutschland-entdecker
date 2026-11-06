@@ -173,7 +173,9 @@ async function deStep(p, right = true) {
   check((await p.$$(".trophy.got")).length === 0, "Noch keine Boss-Pokale");
   await shot(p, "pet");
   // Tier wählen und Snacks (Münzen = Punkte / 10 minus Ausgaben)
-  check((await p.$$(".kind")).length === 7 && (await p.textContent(".kind.on b")) === "Hund", "Tierauswahl: 7 Tiere, Hund gewählt");
+  check((await p.$$(".kind")).length === 13 && (await p.textContent(".kind.on b")) === "Hund", "Tierauswahl: 13 Tiere, Hund gewählt");
+  const shapes = await p.evaluate(() => [...document.querySelectorAll(".kind .dog")].map((s) => s.textContent.trim() || "pixel"));
+  check(new Set(shapes).size === 13, "Alle 13 Tiere sehen verschieden aus (" + shapes.join(" ") + ")");
   await p.click('.kind[data-v="fuchs"]');
   check((await S(p)).pet.kind === "fuchs" && (await p.textContent(".petview h1")) === "Mein Fuchs" && (await p.textContent(".petmeta .stage")) === "Großer Fuchs", "Fuchs gewählt: Titel und Stufenname");
   check(await p.$(".bigdog .dog.k-fuchs"), "Fuchs wird gezeichnet");
@@ -210,6 +212,16 @@ async function deStep(p, right = true) {
   check(await p.isDisabled('.snack[data-v="acc:kappe"]'), "Zu wenig Münzen: Zubehör gesperrt");
   await p.click('.kind[data-v="hund"]');
   check((await p.textContent(".petmeta .stage")) === "Großer Hund", "zurück zum Hund");
+  // Spielstand überlebt: Hauptschlüssel weg -> zweite Kopie; beide weg -> IndexedDB-Spiegel
+  await p.click('.kind[data-v="panda"]');
+  await p.waitForTimeout(400);
+  await ev(p, "(localStorage.removeItem('deutschland-entdecker-v1'), true)");
+  await p.reload(); await p.waitForSelector("#app *");
+  check((await S(p)).pet.kind === "panda", "Hauptschlüssel gelöscht: Stand kommt aus der zweiten Kopie");
+  await ev(p, "(localStorage.removeItem('deutschland-entdecker-v1'), localStorage.removeItem('deutschland-entdecker-v1-bak'), true)");
+  await p.reload();
+  await p.waitForFunction(() => window.__DE && window.__DE.S.pet.kind === "panda", null, { timeout: 6000 }).catch(() => {});
+  check((await S(p)).pet.kind === "panda", "Beide Schlüssel gelöscht: Stand kommt aus IndexedDB zurück");
   check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
   await ctx.close();
 }

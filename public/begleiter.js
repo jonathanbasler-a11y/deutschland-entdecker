@@ -59,6 +59,9 @@
     { id: "tiger", name: "Tiger", word: "Tiger", pal: { b: "#f0922b", B: "#d0731a", o: "#3a1c08", l: "#fff0d8", e: "#3a1c08" }, extra: [...EARS, [6, 8, 1, 3, "o"], [9, 8, 1, 3, "o"], [12, 8, 1, 3, "o"], [16, 2, 1, 2, "o"]] },
     { id: "drache", name: "Drache", word: "Drache", pal: { b: "#4cbf5a", B: "#2f8f3a", o: "#14391a", l: "#d7f5a8", e: "#14391a" }, extra: [[14, -1, 1, 2, "y"], [19, -1, 1, 2, "y"], [5, 6, 1, 2, "y"], [8, 6, 1, 2, "y"], [11, 6, 1, 2, "y"]] },
   ];
+  // Außer dem Pixel-Hund haben alle Tiere ihre eigene Gestalt (Emoji im Bild); weitere Tiere zur Auswahl
+  const EMO = { fuchs: "🦊", katze: "🐱", panda: "🐼", wolf: "🐺", tiger: "🐯", drache: "🐲", einhorn: "🦄", pinguin: "🐧", eule: "🦉", hase: "🐰", koala: "🐨", dino: "🦕" };
+  [["einhorn", "Einhorn"], ["pinguin", "Pinguin"], ["eule", "Eule"], ["hase", "Hase"], ["koala", "Koala"], ["dino", "Dino"]].forEach(([id, name]) => KINDS.push({ id, name, word: name, pal: {}, extra: [] }));
   const kindOf = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
   const SNACKS = [
     { id: "apfel", name: "Apfel", icon: "🍎", price: 3, full: 15 },
@@ -103,8 +106,17 @@
   }
   const gearOf = (xp) => GEAR.filter((g) => xp >= g.xp).map((g) => g.id);
   // Hund als SVG. Zwei Bilder für Schwanz und Beine, die CSS abwechselt (wedeln, laufen).
-  function dog(xp, cls, label, kind) {
+  function dog(xp, cls, label, kind, worn) {
     const gear = gearOf(xp), K = kindOf(kind), pal = Object.assign({}, PAL, K.pal);
+    if (EMO[K.id]) {
+      // eigene Gestalt je Tier; wächst mit der Stufe, Ausrüstung als kleine Zeichen
+      const st = stageOf(xp), S = [58, 68, 78, 88][st], a = (t, x, y, f) => `<text x="${x}" y="${y}" font-size="${f}" text-anchor="middle">${t}</text>`;
+      const on = (slot) => (worn || []).map((id) => ACC.find((x) => x.id === id)).find((x) => x && x.slot === slot);
+      const ic = (slot, x, y, f) => { const it = on(slot); return it ? a(it.icon, x, y, f) : ""; };
+      // Zubehör sitzt am Gesicht: kommt Kopfschmuck, entfällt der Helm; Schleife ersetzt den Schal
+      const g = (gear.includes("scarf") && !on("neck") ? a("🧣", 50, 96, S * 0.4) : "") + (gear.includes("helm") && !on("head") ? a("⛑️", 50, 88 - S * 0.62, S * 0.45) : "") + (gear.includes("cape") ? a("🏅", 84, 92, 24) : "");
+      return `<svg class="dog emo k-${K.id} st${st} ${cls || ""}" viewBox="0 0 100 100" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${ic("ear", 50, 88 - S * 0.02, S * 1.0)}${a(EMO[K.id], 50, 88, S)}${g}${ic("eyes", 50, 88 - S * 0.36, S * 0.42)}${ic("neck", 50, 96, S * 0.38)}${ic("head", 50, 88 - S * 0.62, S * 0.5)}</svg>`;
+    }
     const rects = (list) => rectsP(list, pal);
     let s = "";
     if (gear.includes("cape")) s += rects(DOG.capeBack);
