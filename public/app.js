@@ -23,8 +23,19 @@
   const readKey = (k) => { try { const t = localStorage.getItem(k); if (!t) return null; const o = JSON.parse(t); return o && typeof o === "object" && !Array.isArray(o) ? o : null; } catch (e) { try { localStorage.setItem(k + "-defekt", localStorage.getItem(k)); } catch (e2) { /* egal */ } return null; } };
   { const raw = readKey(KEY) || readKey(BAK); if (raw) S = Object.assign(defaults(), raw); }
   const idb = (fn) => { try { const q = indexedDB.open("de-entdecker-save", 1); q.onupgradeneeded = () => q.result.createObjectStore("s"); q.onsuccess = () => { try { fn(q.result); } catch (e) { /* egal */ } }; } catch (e) { /* ohne IndexedDB weiter */ } };
+  // Aufholbonus: solange er läuft, zählen neue Punkte aus allen Fächern mehrfach (Zusatz steht in S.boost.extra)
+  const rawXp = () => S.xp + FAECH.reduce((a, f) => a + (f.xp ? f.xp() : 0), 0);
+  function accrue() {
+    const b = S.boost;
+    if (!b || typeof b !== "object") return;
+    const raw = rawXp(), d = raw - (b.last == null ? raw : b.last);
+    if (d > 0 && Date.now() <= b.until) b.extra = (b.extra || 0) + d * ((b.mult || 3) - 1);
+    b.last = raw;
+  }
+  const boostLeft = () => (S.boost && Date.now() <= S.boost.until ? S.boost.until - Date.now() : 0);
   const save = () => {
     let t;
+    try { accrue(); } catch (e) { /* vor dem Start egal */ }
     try { t = JSON.stringify(S); localStorage.setItem(KEY, t); localStorage.setItem(BAK, t); } catch (e) { /* egal */ }
     if (t) idb((db) => db.transaction("s", "readwrite").objectStore("s").put(t, "state"));
   };
@@ -314,7 +325,7 @@
   /* ================= Begleiter: Pixel-Hund, Bauprojekte ================= */
   const pet = () => S.pet || (S.pet = defaults().pet);
   // Futter = Punkte aus allen Fächern zusammen
-  const totalXp = () => S.xp + FAECH.reduce((a, f) => a + (f.xp ? f.xp() : 0), 0);
+  const totalXp = () => { accrue(); return rawXp() + (S.gift || 0) + ((S.boost && S.boost.extra) || 0); };
   // Hund gewachsen oder neue Ausrüstung? Einmal feiern.
   function petCheck() {
     const p = pet(), xp = totalXp(), st = B.stageOf(xp), gear = B.gearOf(xp).length;
@@ -364,6 +375,7 @@
         <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
           <div class="pbar big"><i style="width:${g.pct}%"></i></div>
           <p class="muted">${g.next ? `Noch ${g.need} Punkte, dann wird ${esc(p.name)} zum ${g.next}. Punkte gibt es in jedem Fach.` : "Ganz groß geworden!"}</p>
+          ${boostLeft() ? `<p class="boostline">🚀 Aufholbonus: dreifache Punkte, noch ${Math.ceil(boostLeft() / 3600000)} Std.</p>` : ""}
           <p class="muted">Tippe auf ${esc(p.name)} zum Streicheln.</p>
           <form class="rename" id="rnf" autocomplete="off"><input id="dogname" type="text" maxlength="14" value="${esc(p.name)}" aria-label="Name des Tiers" autocapitalize="words" autocorrect="off" spellcheck="false"><button class="btn ghost" type="submit">Umbenennen</button></form>
         </div>
@@ -1633,7 +1645,7 @@
       case "skipname": S.askedName = true; save(); closeModal(); break;
       case "savesettings": S.name = ($("#nm2").value || "").trim(); S.sound = $("#snd").checked; S.speak = $("#spk").checked; save(); closeModal(); renderHome(); break;
       case "reset":
-        if (b.dataset.sure) { S = defaults(); S.askedName = true; save(); go("home"); }
+        if (b.dataset.sure) { S = defaults(); S.askedName = true; S.gift2 = true; save(); go("home"); }
         else { b.dataset.sure = "1"; b.textContent = "Wirklich alles löschen? Noch einmal tippen."; b.classList.add("danger"); }
         break;
       case "subject": if (v === "de" || fachOf(v)) { S.subject = v; save(); go("home"); } break;
@@ -1679,5 +1691,12 @@
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp };
+  // Einmaliges Geschenk nach dem verlorenen Spielstand: 5000 Punkte und 24 Stunden dreifache Punkte zum Aufholen
+  if (!S.gift2 && (!window.__DE_TEST || TEST.gift)) {
+    S.gift = (S.gift || 0) + 5000; S.gift2 = true;
+    S.boost = { until: Date.now() + 24 * 3600000, mult: 3, extra: 0, last: rawXp() };
+    save();
+    setTimeout(() => toast("🎁 5000 Geschenk-Punkte! Und einen Tag lang dreifache Punkte zum Aufholen 🚀"), 600);
+  }
   render();
 })();

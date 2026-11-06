@@ -386,6 +386,25 @@ for (const [name, w, h] of [["iPad Air quer", 1180, 820], ["iPad Air hoch", 820,
   await ctx.close();
 }
 
+// 6) Geschenk: 5000 Punkte einmalig, 24 Stunden dreifache Punkte (Zusatz wird nur im Zeitfenster gesammelt)
+{
+  const { ctx, p } = await fresh({ width: 1180, height: 820 }, { gift: true });
+  check((await S(p)).gift === 5000 && (await ev(p, "window.__DE.totalXp()")) === 5000, "Geschenk: 5000 Punkte");
+  const bo = (await S(p)).boost;
+  check(bo && bo.mult === 3 && bo.until - Date.now() > 23 * 3600000, "Aufholbonus für 24 Stunden gesetzt");
+  check((await ev(p, "(window.__DE.S.xp += 100, window.__DE.totalXp())")) === 5300, "Im Bonus zählen 100 Punkte dreifach (5300)");
+  await ev(p, "(window.__DE.S.boost.until = Date.now() - 1, window.__DE.S.xp += 100, window.__DE.totalXp())");
+  check((await ev(p, "window.__DE.totalXp()")) === 5400, "Nach dem Bonus zählen Punkte einfach (5400)");
+  await p.click('[data-act="pet"]');
+  check(!(await p.$(".boostline")), "Abgelaufener Bonus wird nicht mehr angezeigt");
+  await ev(p, "(window.__DE.S.boost.until = Date.now() + 3600000, true)");
+  await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
+  check(await p.$(".boostline"), "Laufender Bonus steht beim Tier");
+  await p.reload(); await p.waitForSelector("#app *");
+  check((await S(p)).gift === 5000, "Geschenk kommt nur einmal (auch nach Neuladen)");
+  await ctx.close();
+}
+
 await b.close(); srv.close();
 console.log(fails ? `${fails} Fehler` : "alle Begleiter-Tests ok");
 process.exit(fails ? 1 : 0);
