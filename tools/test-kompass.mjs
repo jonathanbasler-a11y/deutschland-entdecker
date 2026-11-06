@@ -174,6 +174,80 @@ const G = req("../public/kompass-geo.js");
     }
   }
 }
+// Mathe 2: Daten und Zufall, Größen, mehr Zahlen. Jede Lösung wird aus dem Aufgabentext unabhängig nachgerechnet.
+req("../public/kompass-mathe2.js");
+{
+  const NEW = K.COMPS.filter((c) => c.gen && /^ma\.(luecke|ergaenzen|mitte|buendeln|strahl|ratsel|tausch|gerade|fehler|umkehr|geschickt|verdoppeln|malvergleich|wachsend|wechsel|mauerdeck|darstellung|uhr|uhrplus|gemischt|einheit|weitsprung|eisdiele|fahrplan|daten\.)/.test(c.id)).map((c) => c.id);
+  ok(NEW.length >= 33, "neue Mathe-Aufgabenarten: " + NEW.length);
+  const mins = (s) => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+  const nums = (s) => (s.match(/\d+(?:[.,]\d+)?/g) || []).map((x) => Number(x.replace(/\./g, "").replace(",", ".")));
+  const counts = {};
+  for (const id of NEW) {
+    for (let seed = 1; seed <= 300; seed++) for (const lv of [1, 2]) {
+      const t = K.task(id, seed * 53 + lv, lv), where = `${id} ${seed}: ${t.q}`;
+      counts[id] = (counts[id] || 0) + 1;
+      ok(t.q && t.tip && t.explain, "Text, Tipp, Erklärung: " + where);
+      if (t.type === "num") ok(Number.isFinite(t.ans) && t.ans >= 0 && K.check(t, t.money ? K.fmtMoney(t.ans) : String(t.ans)).ok && !K.check(t, String(t.ans + 1)).ok, "Zahl: " + where);
+      if (t.type === "choice") ok(new Set(t.opts).size === t.opts.length && t.ans >= 0 && t.ans < t.opts.length && K.check(t, t.ans).ok && (!t.figs || t.figs.length === t.opts.length), "Auswahl: " + where);
+      if (t.type === "multi") ok(t.ans.length >= 1 && t.ans.length < t.opts.length && K.check(t, t.ans).ok, "Mehrfach: " + where);
+      if (t.type === "match") ok(K.check(t, t.ans).ok && new Set(t.right).size === t.right.length, "Verbinden: " + where);
+      if (t.type === "write") ok(K.check(t, t.ans[0]).ok && !K.check(t, "xyzxyz").ok, "Schreiben: " + where);
+      if (t.type === "grid") ok(t.ans.every((c) => c[0] < t.cols && c[1] < t.rows) && K.check(t, t.ans.map((c) => c.join(","))).ok, "Raster: " + where);
+      if (t.table) ok(t.table.rows.every((row) => row.length === t.table.head.length), "Tabelle rechteckig: " + where);
+      let m;
+      if (id === "ma.luecke") {
+        if ((m = /^(\d+) · ___ = ([\d.]+)$/.exec(t.q))) ok(+m[1] * t.ans === nums(m[2])[0], where);
+        else if ((m = /^___ : (\d+) = (\d+)$/.exec(t.q))) ok(t.ans / +m[1] === +m[2], where);
+        else if ((m = /^(\d+) \+ ___ = (\d+)$/.exec(t.q))) ok(+m[1] + t.ans === +m[2], where);
+        else if ((m = /^___ − (\d+) = (\d+)$/.exec(t.q))) ok(t.ans - +m[1] === +m[2], where);
+        else ok(false, "unbekanntes Format " + where);
+      }
+      if (id === "ma.ergaenzen") { m = /^([\d.]+) \+ ___ = ([\d.]+)$/.exec(t.q); ok(m && nums(m[1])[0] + t.ans === nums(m[2])[0], where); }
+      if (id === "ma.mitte") { const [a, b] = nums(t.q); ok(t.ans - a === b - t.ans && a < t.ans && t.ans < b, where); }
+      if (id === "ma.buendeln") { const [H, Z, E] = nums(t.q); ok(H * 100 + Z * 10 + E === t.ans, where); }
+      if (id === "ma.strahl" && /Schrittweite/.test(t.q)) { const [a, , p] = nums(t.q); ok(t.ans * p === 100, where); }
+      if (id === "ma.ratsel") {
+        const n = nums(t.q), f = /verdopple/.test(t.q) ? (x) => 2 * x + n[0] : /verdreifache/.test(t.q) ? (x) => 3 * x - n[0] : /halbiere/.test(t.q) ? (x) => x / 2 + n[0] : /ziehe/.test(t.q) ? (x) => x - n[0] : (x) => x + n[0];
+        const given = n[n.length - 1], sols = []; for (let x = 0; x <= 400; x++) if (f(x) === given) sols.push(x);
+        ok(sols.length === 1 && sols[0] === t.ans, "Zahlenrätsel eindeutig: " + where);
+      }
+      if (id === "ma.tausch") { const [a, b, c, d] = nums(t.q); if (/Tausch/.test(t.q)) ok(t.ans === a * b, where); else ok(t.ans === a && (/\+ ___/.test(t.q) ? a * (b + 1) === c + t.ans : a * (b - 1) === c - t.ans), where); }
+      if (id === "ma.gerade") { const want = /ungerade/.test(t.q) ? 1 : 0; ok(t.opts.every((o, i) => { const [a, b] = nums(o); return t.ans.includes(i) === ((a + b) % 2 === want); }), where); }
+      if (id === "ma.fehler") { const [a, b, w] = nums(t.q); ok(t.ans === a + b && w !== t.ans, where); }
+      if (id === "ma.umkehr") { const [a, b, c] = nums(t.q); ok(c === a - b && t.opts[t.ans].replace(/\./g, "") === `${c} + ${b} = ${a}`, where); }
+      if (id === "ma.geschickt") { const n = nums(t.q); ok((/− 99/.test(t.q) && t.ans === n[0] - 99) || (/\+ 99/.test(t.q) && t.ans === n[0] + 99) || (/\+ 199/.test(t.q) && t.ans === n[0] + 199) || (/25 ·/.test(t.q) && t.ans === 25 * n[1]), where); }
+      if (id === "ma.verdoppeln") { const [n] = nums(t.q); ok(/Verdopple/.test(t.q) ? t.ans === 2 * n : t.ans * 2 === n, where); }
+      if (id === "ma.malvergleich") { const body = /: (.*) ___ (.*)$/.exec(t.q), val = (s) => (s.includes("+") ? s.split(" + ").reduce((x, y) => x + +y, 0) : s.includes("·") ? s.split(" · ").reduce((x, y) => x * +y, 1) : +s), l = val(body[1]), r2 = val(body[2]); ok(t.opts[t.ans] === (l < r2 ? "<" : l === r2 ? "=" : ">"), where); }
+      if (id === "ma.wachsend") { const n = nums(t.q), d = n[3] - n[1]; ok(n[5] - n[3] === d && t.ans === n[1] + (n[6] - 1) * d, where); }
+      if (id === "ma.wechsel") { const seq = nums(t.q.split("? ")[1]); const p = seq[1] - seq[0], q = seq[1] - seq[2]; ok(t.opts[t.ans] === `erst +${p}, dann −${q}` && seq[3] - seq[2] === p && seq[4] - seq[3] === -q, where); }
+      if (id === "ma.mauerdeck" && /Mitte gehört/.test(t.q)) { const n = nums(t.q), mx = Math.max(n[0], n[1], n[2]); ok(+t.opts[t.ans] === mx, where); }
+      if (id === "ma.uhrplus") { const [h, m, d] = [...t.q.match(/(\d+):(\d+)/).slice(1).map(Number), +/braucht (\d+)/.exec(t.q)[1]], tot = h * 60 + m + d; ok(t.ans[0] === `${Math.floor(tot / 60)}:${String(tot % 60).padStart(2, "0")}`, where); }
+      if (id === "ma.gemischt" && t.type === "num") { const n = nums(t.q); if (/m .* cm = ___ cm/.test(t.q)) ok(n[0] * 100 + n[1] === t.ans, where); else if (/kg .* g = ___ g/.test(t.q)) ok(n[0] * 1000 + n[1] === t.ans, where); else if (/___ m$/.test(t.q) && /km/.test(t.q)) ok(n[0] === n[1] * 1000 + t.ans, where); else if (/___ ml$/.test(t.q)) ok(n[0] === n[1] * 1000 + t.ans, where); else if (/kg ___ g/.test(t.q)) ok(n[0] === n[1] * 1000 + t.ans, where); }
+      if (id === "ma.weitsprung") { const row = (name) => t.table.rows.find((x) => x[0] === name)[1], names = t.table.rows.map((x) => x[0]), hi = names.find((n) => t.q.startsWith(`Weitsprung beim Sportfest: ${n} `)), lo = names.find((n) => t.q.endsWith(`als ${n}.`)); ok(Math.round((nums(row(hi))[0] - nums(row(lo))[0]) * 100) === t.ans, where); }
+      if (id === "ma.eisdiele" && /zurück/.test(t.q)) { const n = nums(t.q); const p = n[0], persons = n[1], k = n[2], pay = n[3]; ok(Math.abs(pay - persons * k * p - t.ans) < 0.001, where); }
+      if (id === "ma.eisdiele" && /3 Kugeln/.test(t.q) && !/zurück/.test(t.q)) ok(Math.abs(3 * nums(t.q)[0] - t.ans) < 0.001, where);
+      if (id === "ma.fahrplan") {
+        const rows = t.table.rows;
+        if (/dauert/.test(t.q)) ok(mins(rows[3][1]) - mins(rows[0][1]) === t.ans, where);
+        else if (/Alle wie viele/.test(t.q)) ok(mins(rows[0][2]) - mins(rows[0][1]) === t.ans, where);
+        else { const dl = mins(/um (\d+:\d+) Uhr/.exec(t.q)[1]); const ok2 = [1, 2, 3].filter((c) => mins(rows[3][c]) <= dl); ok(t.ans === Math.max(...ok2) - 1, where); }
+      }
+      if (id === "ma.daten.durchschnitt") { const n = nums(t.q), cnt = n[0], v = n.slice(1); ok(v.length === cnt && v.reduce((a, b) => a + b, 0) / cnt === t.ans, where); }
+      if (id === "ma.daten.kombi") { const [a, b] = nums(t.q); ok(a * b === t.ans, where); }
+      if (id === "ma.daten.gleich") { const [n, a, big] = nums(t.q); ok(t.ans / big === a / n, where); }
+      if (id === "ma.daten.tabelle") {
+        const vals = t.table.rows[0].slice(1).map(Number), cats = t.table.head.slice(1);
+        if (/am häufigsten/.test(t.q)) ok(vals[t.ans] === Math.max(...vals), where);
+        else if (/zusammen/.test(t.q)) ok(t.ans === vals.reduce((a, b) => a + b, 0), where);
+        else if (/mehr/.test(t.q)) { const [x, y] = [...t.q.matchAll(/„([^“]+)“/g)].map((q) => vals[cats.indexOf(q[1])]); ok(t.ans === x - y, where); }
+        else { const c = /„([^“]+)“/.exec(t.q)[1]; ok(t.ans === vals[cats.indexOf(c)], where); }
+      }
+      if (id === "ma.daten.balkenzeichnen") { const vals = t.table.rows[0].slice(1).map(Number), top = (x) => t.ans.filter((c) => c[0] === x).length; ok(vals.every((v, x) => top(x) * 10 === v), "Balken passen zur Tabelle: " + where); }
+    }
+  }
+  ok(Object.keys(counts).length === NEW.length, "alle neuen Arten erzeugt");
+  ok(K.compsOfArea("ma.daten").length === 11, "Daten und Zufall: 11 Arten (" + K.compsOfArea("ma.daten").length + ")");
+}
 // Einzelfälle, die stimmen müssen
 ok(K.task("de.recht.gross", 0).ans.length === 4, "Groß: Satz 1 hat 4 Wörter");
 ok(K.check(K.task("de.recht.trenne", 0), "Unsere Mannschaft hat das letzte Spiel verloren.").ok, "Wörter trennen: richtiger Satz");

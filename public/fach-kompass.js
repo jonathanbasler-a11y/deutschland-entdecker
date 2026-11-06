@@ -212,22 +212,23 @@
       return;
     }
     if (t.type === "grid") {
-      const sz = t.cell, W = t.cols * sz, H = t.rows * sz, given = new Set(t.given.map((c) => c.join(","))), sel = new Set(r.sel), sol = new Set((t.solCells || []).map((c) => c.join(",")));
-      let g = `<rect width="${W + 8}" height="${H + 8}" fill="#fff"/>`;
+      const sz = t.cell, pl = t.padL || 0, pb = t.padB || 0, top = t.yLabels ? 12 : 4, W = t.cols * sz, H = t.rows * sz, given = new Set(t.given.map((c) => c.join(","))), sel = new Set(r.sel), sol = new Set((t.solCells || []).map((c) => c.join(",")));
+      let g = `<rect width="${pl + W + 8}" height="${H + pb + top + 4}" fill="#fff"/>`;
       for (let x = 0; x < t.cols; x++) for (let y = 0; y < t.rows; y++) {
         const k = x + "," + y;
         let fill = "#fff", stroke = "#cdd6e3", sw = 1;
         if (given.has(k)) { fill = "#8fb8ff"; stroke = "#16304f"; sw = 2; }
         else if (sel.has(k)) { fill = "#ffe08a"; stroke = "#a67c00"; sw = 2.5; }
         if (r.showSol && !given.has(k)) {
-          if (sol.has(k) && !sel.has(k)) { fill = "#b7f0c0"; stroke = "#2f8f3a"; sw = 2.5; }
-          else if (sel.has(k) && sol.has(k)) { fill = "#b7f0c0"; stroke = "#2f8f3a"; sw = 2.5; }
+          if (sol.has(k)) { fill = "#b7f0c0"; stroke = "#2f8f3a"; sw = 2.5; }
           else if (sel.has(k) && !t.verify) { fill = "#ffb3b3"; stroke = "#b83232"; sw = 2.5; }
         }
-        g += `<rect x="${4 + x * sz}" y="${4 + y * sz}" width="${sz}" height="${sz}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${given.has(k) || r.lock ? "" : ` data-act="k-cell" data-v="${k}" class="kcell"`}/>`;
+        g += `<rect x="${pl + 4 + x * sz}" y="${top + y * sz}" width="${sz}" height="${sz}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${given.has(k) || r.lock ? "" : ` data-act="k-cell" data-v="${k}" class="kcell"`}/>`;
       }
-      if (t.axis != null) g += `<line x1="${4 + t.axis * sz}" y1="0" x2="${4 + t.axis * sz}" y2="${H + 8}" stroke="#d33" stroke-width="3" stroke-dasharray="8 6"/>`;
-      a.innerHTML = `<div class="kgridwrap"><svg class="kgrid" viewBox="0 0 ${W + 8} ${H + 8}" role="group" aria-label="Raster zum Antippen">${g}</svg></div>`;
+      if (t.axis != null) g += `<line x1="${pl + 4 + t.axis * sz}" y1="0" x2="${pl + 4 + t.axis * sz}" y2="${H + top + 4}" stroke="#d33" stroke-width="3" stroke-dasharray="8 6"/>`;
+      if (t.yLabels) t.yLabels.forEach((l, k) => { g += `<text x="${pl - 2}" y="${top + H - k * sz + 4}" text-anchor="end" font-size="13" fill="#16304f">${esc(l)}</text>`; });
+      if (t.xLabels) t.xLabels.forEach((l, i) => { g += `<text x="${pl + 4 + i * sz + sz / 2}" y="${top + H + 18}" text-anchor="middle" font-size="13" font-weight="700" fill="#16304f">${esc(l)}</text>`; });
+      a.innerHTML = `<div class="kgridwrap"><svg class="kgrid" viewBox="0 0 ${pl + W + 8} ${H + pb + top + 4}" role="group" aria-label="Raster zum Antippen">${g}</svg></div>`;
       act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo">Prüfen</button>`;
       return;
     }
@@ -499,7 +500,15 @@
       case "k-unorder": if (r && !r.lock) { r.order.splice(+v, 1); drawAnswer(); } break;
       case "k-tf": if (r && !r.lock) { const [i, val] = v.split(":"); r.sel[+i] = val === "1"; drawAnswer(); } break;
       case "k-check-ans": if (r && !r.lock) { const t = r.cur; submit(t.type === "order" ? r.order : t.type === "tf" ? r.sel : r.sel); } break;
-      case "k-cell": if (r && !r.lock) { r.sel = r.sel.includes(v) ? r.sel.filter((x) => x !== v) : r.sel.concat(v); drawAnswer(); } break;
+      case "k-cell": if (r && !r.lock) {
+        if (r.cur.bars) {
+          // Balken: Tippen setzt die Höhe der Spalte auf dieses Kästchen (nochmal auf das oberste tippen löscht)
+          const [cx, cy] = v.split(",").map(Number), rows = r.cur.rows, lvl = rows - cy, have = r.sel.filter((k) => +k.split(",")[0] === cx).length;
+          r.sel = r.sel.filter((k) => +k.split(",")[0] !== cx);
+          if (lvl !== have) for (let j = 0; j < lvl; j++) r.sel.push(cx + "," + (rows - 1 - j));
+        } else r.sel = r.sel.includes(v) ? r.sel.filter((x) => x !== v) : r.sel.concat(v);
+        drawAnswer();
+      } break;
       case "k-mat": if (r && !r.lock) { const [i, j] = v.split(":").map(Number); r.sel[i] = (r.sel[i] || []).includes(j) ? [] : [j]; drawAnswer(); } break;
       case "k-gap": if (r && !r.lock) { const i = +v; r.sel = r.sel.includes(i) ? r.sel.filter((x) => x !== i) : r.sel.concat(i); drawAnswer(); } break;
       case "k-self-go": if (r && !r.lock) { const ta = $("#kst"); r.selfText = ta ? ta.value.trim() : ""; r.selfStage = 1; drawAnswer(); } break;

@@ -67,7 +67,7 @@
     { id: "ma.groessen", fach: "ma", name: "Größen und Messen", icon: "📏", ready: true },
     { id: "ma.muster", fach: "ma", name: "Muster und Strukturen", icon: "🔁", ready: true },
     { id: "ma.raum", fach: "ma", name: "Raum und Form", icon: "🔷", ready: true },
-    { id: "ma.daten", fach: "ma", name: "Daten und Zufall", icon: "📊", ready: false },
+    { id: "ma.daten", fach: "ma", name: "Daten und Zufall", icon: "📊", ready: true },
   ];
   const COMPS = [];
   const comp = (id, area, name, gen) => COMPS.push({ id, area, name, gen });
