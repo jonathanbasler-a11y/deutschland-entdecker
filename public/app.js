@@ -331,7 +331,9 @@
       : `<h2>Alle Bauprojekte fertig! 🏆</h2><div class="build">${B.PROJECTS.map((x) => B.projectSvg(x, x.size, "small")).join("")}</div><p class="bstat"><b>Du bist Baumeister!</b> ${bd.bonus} Bonus-Blöcke</p>`;
     app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein ${esc(K.word)}</h1></div>
       <section class="card petstage">
-        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind)}</button>
+        <div class="room" style="background:${B.roomOf(p.room).bg}">
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind)}${(p.worn || []).map((id) => { const a = B.ACC.find((x) => x.id === id); return a ? `<span class="acc acc-${a.slot}" aria-hidden="true">${a.icon}</span>` : ""; }).join("")}</button>
+        <div class="decor" aria-hidden="true">${(p.decor || []).map((id) => { const d = B.DECOR.find((x) => x.id === id); return d ? `<span>${d.icon}</span>` : ""; }).join("")}</div></div>
         <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
           <div class="pbar big"><i style="width:${g.pct}%"></i></div>
           <p class="muted">${g.next ? `Noch ${g.need} Punkte, dann wird ${esc(p.name)} zum ${g.next}. Punkte gibt es in jedem Fach.` : "Ganz groß geworden!"}</p>
@@ -344,6 +346,9 @@
         <div class="pbar big sat" aria-label="Satt: ${full} von 100"><i style="width:${full}%"></i></div>
         <div class="snacks">${B.SNACKS.map((x) => `<button class="snack" data-act="feed" data-v="${x.id}" ${coins < x.price ? "disabled" : ""}><span class="si">${x.icon}</span><b>${x.name}</b><small>🪙 ${x.price}</small></button>`).join("")}</div>
         <p class="muted">Münzen: für je 10 Punkte aus allen Fächern bekommst du eine. ${esc(p.name)} wird nie traurig, Snacks sind nur zum Freuen.</p></section>
+      <section class="card"><h2>Zubehör <span class="coins">🪙 ${coins}</span></h2><div class="snacks">${B.ACC.map((x) => { const own = (p.acc || []).includes(x.id), on = (p.worn || []).includes(x.id); return `<button class="snack${on ? " on" : ""}" data-act="${own ? "wear" : "buy"}" data-v="${own ? "" : "acc:"}${x.id}" ${!own && coins < x.price ? "disabled" : ""} aria-pressed="${on}"><span class="si">${x.icon}</span><b>${x.name}</b><small>${own ? (on ? "an ✓" : "anziehen") : "🪙 " + x.price}</small></button>`; }).join("")}</div></section>
+      <section class="card"><h2>Zimmer und Deko <span class="coins">🪙 ${coins}</span></h2><div class="snacks">${B.ROOMS.map((x) => { const own = x.price === 0 || (p.rooms || []).includes(x.id), on = B.roomOf(p.room).id === x.id; return `<button class="snack room-b${on ? " on" : ""}" data-act="${own ? "room" : "buy"}" data-v="${own ? "" : "room:"}${x.id}" ${!own && coins < x.price ? "disabled" : ""} aria-pressed="${on}"><span class="si rsw" style="background:${x.bg}"></span><b>${x.name}</b><small>${own ? (on ? "hier ✓" : "einziehen") : "🪙 " + x.price}</small></button>`; }).join("")}</div>
+        <div class="snacks">${B.DECOR.map((x) => { const own = (p.decor || []).includes(x.id); return `<button class="snack${own ? " on" : ""}" data-act="buy" data-v="decor:${x.id}" ${own || coins < x.price ? "disabled" : ""}><span class="si">${x.icon}</span><b>${x.name}</b><small>${own ? "steht im Zimmer ✓" : "🪙 " + x.price}</small></button>`; }).join("")}</div></section>
       <section class="card"><h2>Ausrüstung</h2><div class="gear">${B.GEAR.map((x) => `<div class="gitem ${gear.includes(x.id) ? "got" : ""}"><span class="gi">${GI[x.id]}</span><b>${x.name}</b><small>${gear.includes(x.id) ? "freigeschaltet" : `ab ${x.xp} Punkten`}</small></div>`).join("")}</div></section>
       <section class="card">${proj}<p class="muted">Blöcke bekommst du so: Etappe geschafft +3 · Boss besiegt +2 (großer Boss +3) · Runde geschafft +1 · neuer Rekord oder Probe +2</p></section>
       <section class="card"><h2>Boss-Pokale</h2><div class="trophies">${B.BOSSES.map((b) => { const n = (p.bosses || {})[b.id] || 0; return `<div class="trophy ${n ? "got" : ""}">${B.bossSvg(b)}<b>${n ? b.name : "???"}</b><small>${n ? n + "× besiegt" : "noch nicht getroffen"}</small></div>`; }).join("")}</div></section>
@@ -353,6 +358,29 @@
   function petKind(id) {
     if (!B.KINDS.some((k) => k.id === id)) return;
     pet().kind = id; save(); toast(`${B.kindOf(id).name} ausgewählt!`); tone("win"); renderPet();
+  }
+  // Kaufen (acc:, room:, decor:), Anziehen, Einziehen
+  function petShop(kind, id) {
+    const p = pet(), list = { acc: B.ACC, room: B.ROOMS, decor: B.DECOR }[kind], it = list && list.find((x) => x.id === id);
+    if (!it) return;
+    const key = { acc: "acc", room: "rooms", decor: "decor" }[kind];
+    p[key] = p[key] || [];
+    if (!p[key].includes(id)) {
+      if (B.coins(totalXp(), p.spent) < it.price) return;
+      p.spent = (p.spent || 0) + it.price; p[key].push(id);
+      if (kind === "acc") { p.worn = (p.worn || []).filter((w) => B.ACC.find((x) => x.id === w).slot !== it.slot).concat(id); }
+      if (kind === "room") p.room = id;
+      toast(`${it.icon || "✨"} ${it.name}!`); tone("win");
+    }
+    save(); renderPet();
+  }
+  function petWear(id) {
+    const p = pet(), it = B.ACC.find((x) => x.id === id);
+    if (!it || !(p.acc || []).includes(id)) return;
+    const on = (p.worn || []).includes(id);
+    p.worn = (p.worn || []).filter((w) => w !== id && B.ACC.find((x) => x.id === w).slot !== it.slot);
+    if (!on) p.worn.push(id);
+    save(); renderPet();
   }
   function petFeed(id) {
     const p = pet(), sn = B.SNACKS.find((x) => x.id === id);
@@ -1567,6 +1595,9 @@
       case "petpet": petPet(); break;
       case "petkind": petKind(v); break;
       case "feed": petFeed(v); break;
+      case "buy": petShop(...v.split(":")); break;
+      case "wear": petWear(v); break;
+      case "room": if (B.ROOMS.some((x) => x.id === v) && (B.roomOf(v).price === 0 || (pet().rooms || []).includes(v))) { pet().room = v; save(); renderPet(); } break;
       case "skipname": S.askedName = true; save(); closeModal(); break;
       case "savesettings": S.name = ($("#nm2").value || "").trim(); S.sound = $("#snd").checked; S.speak = $("#spk").checked; save(); closeModal(); renderHome(); break;
       case "reset":

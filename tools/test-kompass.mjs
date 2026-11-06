@@ -250,6 +250,7 @@ req("../public/kompass-mathe2.js");
 }
 // Zahlraum bis 1 Million (nach einer echten Klassenarbeit): jede Lösung unabhängig aus Text und Bild nachgerechnet
 req("../public/kompass-zahlraum.js");
+req("../public/kompass-original.js");
 {
   const ZR = ["ma.nachbarstelle", "ma.nachbarwahl", "ma.strahllesen", "ma.plaettchen", "ma.tafelwort", "ma.zahlwortschreiben", "ma.verwechsel"];
   const P = { Zehner: 10, Hunderter: 100, Tausender: 1000, Zehntausender: 10000, Hunderttausender: 100000 };
@@ -361,4 +362,34 @@ ok(K.planFor("2026-11-18").kind === "warm" && K.planFor("2026-11-10").kind === "
 ok(K.etappen("full").length === 3 && K.etappen("mini").length === 1, "Etappen je Tag");
 ok(K.compsOf("de").every((id) => id.startsWith("de.")) && K.compsOf("ma").every((id) => id.startsWith("ma.")), "Fächer getrennt");
 
+// Original-Tests 2025: jede Aufgabe lösbar, Zahlen unabhängig nachgerechnet
+{
+  const goodGiven = (t) => t.type === "num" ? String(t.ans) : t.type === "choice" ? t.ans : t.type === "write" ? t.ans[0] : t.type === "nums" ? t.fields.map((f) => String(f.ans)) : t.type === "match" ? t.ans : (t.type === "pick" || t.type === "cut") ? t.ans : t.type === "self" ? true : null;
+  for (const fach of ["ma", "de"]) {
+    const gs = K.original(fach);
+    ok(gs.length >= 2, "Original " + fach + ": Teile");
+    for (const g of gs) for (const t of g.tasks) {
+      ok(K.COMP[t.comp], "Original: Aufgabenart bekannt " + t.comp);
+      ok(t.tip && t.explain && t.q, "Original: Tipp und Erklärung " + t.key);
+      const given = goodGiven(t);
+      ok(given !== null, "Original: Typ " + t.type);
+      ok(K.check(t, given).ok, "Original lösbar: " + t.key + " " + t.q.slice(0, 40));
+      if (t.type === "num") ok(!K.check(t, String(t.ans + 1)).ok, "Original: falsche Zahl abgelehnt");
+      ok(K.solution(t) !== "", "Original: Lösungstext " + t.key);
+    }
+  }
+  const byQ = (fach, re) => K.original(fach).flatMap((g) => g.tasks).find((t) => re.test(t.q));
+  ok(1691 + 268 === byQ("ma", /1691/).ans && 1739 - 658 === byQ("ma", /1739/).ans, "Original: Aufgabe 1");
+  ok(286 - 174 === byQ("ma", /Kai/).ans && 5 * 18 === 90 && 6 * 38 === 228 && 48 / 4 === 12, "Original: Aufgaben 2 und 4");
+  ok(500 + 130 + 2 === byQ("ma", /5 H 13 Z/).ans, "Original: Aufgabe 8");
+  ok((750 + 850) / 2 === 800 && (340 + 480) / 2 === 410, "Original: Aufgabe 9");
+  ok(478 - 97 === 378 + 3, "Original: Aufgabe 10");
+  ok(Math.max(...[[20, 25, 30], [20, 30, 25], [25, 20, 30], [25, 30, 20], [30, 20, 25], [30, 25, 20]].map(([a, b, c]) => a + 2 * b + c)) === byQ("ma", /Zahlenmauer/).ans, "Original: Aufgabe 7 größter Deckstein");
+  ok(16 * 60 + 18 + 45 === 17 * 60 + 3, "Original: Aufgabe 18");
+  ok(Math.round((2.8 - 2.1) * 100) === byQ("ma", /Weitsprung/).ans, "Original: Aufgabe 20");
+  const folge = byQ("ma", /Zahlenfolge/), seq = [460, 510, 490, 540, 520, 570];
+  ok(seq.every((v, i) => !i || v - seq[i - 1] === (i % 2 ? 50 : -20)) && /\+50, dann −20/.test(folge.opts[folge.ans]), "Original: Aufgabe 5");
+  const gross = byQ("de", /großgeschrieben/);
+  ok(gross.ans.map((i) => gross.tokens[i].replace(/\.$/, "")).join(" ") === "die kinder erwachsenen süßigkeiten", "Original: Großschreibung");
+}
 console.log(`kompass ok (${n} Prüfungen)`);

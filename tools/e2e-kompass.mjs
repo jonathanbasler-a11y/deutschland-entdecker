@@ -387,6 +387,21 @@ async function openParents(p) {
   await ctx.close();
 }
 
+// 3e) Original-Proben 2025: Startseite, 3 Teile, erste Aufgabe lösbar
+for (const fach of ["de", "ma"]) {
+  const { ctx, p } = await fresh("2026-11-12", { width: 1180, height: 820 }, { kProbeMs: 3600000 });
+  await p.tap(`[data-act="k-probe"][data-v="${fach}-orig"]`);
+  check(/Original 2025/.test(await p.textContent(".pintro")), `Original ${fach}: Einleitung nennt den echten Test`);
+  await p.tap('.prate-b[data-v="2"]');
+  await p.waitForSelector("#kcard");
+  const info = await p.evaluate(() => { const r = window.__DE_K.R; return { blocks: r.blocks.length, orig: r.orig, n: r.q.length, label: document.querySelector(".mlabel").textContent }; });
+  check(info.blocks === 3 && info.orig === true && info.n >= 20 && /Original/.test(info.label), `Original ${fach}: 3 Teile, ${info.n} Aufgaben`);
+  await answer(p, true);
+  await p.waitForFunction(() => window.__DE_K.R.given[0] !== undefined, null, { timeout: 4000 });
+  check(p.errors.length === 0, `Original ${fach} ohne Fehler ` + p.errors.join("|"));
+  await ctx.close();
+}
+
 // 4) Eltern-Übersicht und Hochformat
 {
   const { ctx, p } = await fresh("2026-11-07", { width: 820, height: 1180 });

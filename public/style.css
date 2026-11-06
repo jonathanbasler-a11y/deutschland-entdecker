@@ -735,3 +735,15 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .prate-b span{font-size:2rem}
 .pwrong{margin:6px 0;padding:8px 10px;border-radius:10px;background:#f6f8fb}
 .pwrong summary{font-weight:700;cursor:pointer}
+
+/* Tier-Zimmer, Zubehör und Deko */
+.room { position: relative; border-radius: 18px; padding: 10px 10px 4px; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+.room .bigdog { position: relative; background: none; border: 0; }
+.acc { position: absolute; font-size: 2.4rem; line-height: 1; pointer-events: none; filter: drop-shadow(0 2px 0 rgba(0,0,0,.2)); }
+.acc-head { right: 6%; top: -4%; }
+.acc-eyes { right: 8%; top: 12%; font-size: 1.8rem; }
+.acc-neck { right: 24%; top: 36%; font-size: 1.8rem; }
+.acc-ear { right: 4%; top: 6%; font-size: 2rem; }
+.decor { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font-size: 2rem; min-height: 8px; }
+.snack.on { outline: 3px solid #3b82f6; }
+.rsw { display: block; width: 44px; height: 32px; border-radius: 8px; border: 2px solid #cdd6e3; }
