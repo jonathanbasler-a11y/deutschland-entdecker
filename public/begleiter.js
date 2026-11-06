@@ -8,6 +8,8 @@
     o: "#3b2412", b: "#c47f3c", B: "#a8672c", l: "#f1c993", e: "#6e4219", k: "#1b1b1b", w: "#ffffff", p: "#ff6f9b",
     r: "#e23b3b", R: "#a82020", g: "#aeb8c2", G: "#6d7884", v: "#7b4bd6", V: "#55309f", y: "#ffd23f", Y: "#c99a00", f: "#ff8a1e",
   };
+  const rectsP = (list, pal) =>
+    list.map(([x, y, w, h, c]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${(pal || PAL)[c] || c}"/>`).join("");
   const rects = (list, pal) => list.map(([x, y, w, h, c]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${(pal || PAL)[c] || c}"/>`).join("");
   const svg = (w, h, inner, cls, label) => `<svg class="${cls || ""}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${inner}</svg>`;
 
@@ -46,15 +48,39 @@
     { id: "torch", name: "Fackel", xp: 1400 },
     { id: "cape", name: "Umhang", xp: 2000 },
   ];
+  // Tiere zur Auswahl: gleiche Pixelfigur, andere Farben und kleine Zusätze
+  const EARS = [[13, 0, 2, 2, "o"], [18, 0, 2, 2, "o"], [13, 1, 1, 1, "p"]];
+  const KINDS = [
+    { id: "hund", name: "Hund", word: "Hund", pal: {}, extra: [] },
+    { id: "fuchs", name: "Fuchs", word: "Fuchs", pal: { b: "#e8742a", B: "#c45a16", o: "#4a2008", l: "#fff3e0", e: "#4a2008" }, extra: EARS },
+    { id: "katze", name: "Katze", word: "Katze", pal: { b: "#9aa3ad", B: "#7b848e", o: "#2c3138", l: "#e9edf2", e: "#2c3138" }, extra: [...EARS, [6, 8, 1, 3, "o"], [9, 8, 1, 3, "o"]] },
+    { id: "panda", name: "Panda", word: "Panda", pal: { b: "#ffffff", B: "#e8e8e8", o: "#111111", l: "#ffffff", e: "#111111" }, extra: [[16, 2, 4, 4, "o"], [17, 3, 2, 2, "k"], [17, 3, 1, 1, "w"]] },
+    { id: "wolf", name: "Wolf", word: "Wolf", pal: { b: "#8e969f", B: "#6b737c", o: "#2a2f36", l: "#d9dee3", e: "#2a2f36" }, extra: EARS },
+    { id: "tiger", name: "Tiger", word: "Tiger", pal: { b: "#f0922b", B: "#d0731a", o: "#3a1c08", l: "#fff0d8", e: "#3a1c08" }, extra: [...EARS, [6, 8, 1, 3, "o"], [9, 8, 1, 3, "o"], [12, 8, 1, 3, "o"], [16, 2, 1, 2, "o"]] },
+    { id: "drache", name: "Drache", word: "Drache", pal: { b: "#4cbf5a", B: "#2f8f3a", o: "#14391a", l: "#d7f5a8", e: "#14391a" }, extra: [[14, -1, 1, 2, "y"], [19, -1, 1, 2, "y"], [5, 6, 1, 2, "y"], [8, 6, 1, 2, "y"], [11, 6, 1, 2, "y"]] },
+  ];
+  const kindOf = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
+  const SNACKS = [
+    { id: "apfel", name: "Apfel", icon: "🍎", price: 3, full: 15 },
+    { id: "keks", name: "Keks", icon: "🍪", price: 5, full: 20 },
+    { id: "wurst", name: "Wurst", icon: "🌭", price: 8, full: 30 },
+    { id: "eis", name: "Eis", icon: "🍦", price: 10, full: 30 },
+    { id: "pizza", name: "Pizza", icon: "🍕", price: 12, full: 40 },
+    { id: "kuchen", name: "Kuchen", icon: "🍰", price: 15, full: 50 },
+  ];
+  // Münzen: je 10 Punkte eine, abzüglich Ausgaben
+  const coins = (xp, spent) => Math.max(0, Math.floor(xp / 10) - (spent || 0));
+  const stageName = (i, kind) => (kind && kind !== "hund" ? ["Baby-", "Junger ", "Großer ", "Held-"][i].replace(/-$/, "-") + kindOf(kind).word : STAGES[i].name);
   const stageOf = (xp) => STAGES.reduce((s, x, i) => (xp >= x.xp ? i : s), 0);
-  function growth(xp) {
+  function growth(xp, kind) {
     const i = stageOf(xp), cur = STAGES[i], nx = STAGES[i + 1];
-    return { stage: i, name: cur.name, next: nx ? nx.name : null, need: nx ? nx.xp - xp : 0, pct: nx ? Math.round(((xp - cur.xp) / (nx.xp - cur.xp)) * 100) : 100 };
+    return { stage: i, name: stageName(i, kind), next: nx ? stageName(i + 1, kind) : null, need: nx ? nx.xp - xp : 0, pct: nx ? Math.round(((xp - cur.xp) / (nx.xp - cur.xp)) * 100) : 100 };
   }
   const gearOf = (xp) => GEAR.filter((g) => xp >= g.xp).map((g) => g.id);
   // Hund als SVG. Zwei Bilder für Schwanz und Beine, die CSS abwechselt (wedeln, laufen).
-  function dog(xp, cls, label) {
-    const gear = gearOf(xp);
+  function dog(xp, cls, label, kind) {
+    const gear = gearOf(xp), K = kindOf(kind), pal = Object.assign({}, PAL, K.pal);
+    const rects = (list) => rectsP(list, pal);
     let s = "";
     if (gear.includes("cape")) s += rects(DOG.capeBack);
     s += `<g class="f1">${rects(DOG.tailA)}</g><g class="f2">${rects(DOG.tailB)}</g>`;
@@ -63,8 +89,9 @@
     if (gear.includes("cape")) s += rects(DOG.cape);
     if (gear.includes("scarf")) s += rects(DOG.scarf);
     if (gear.includes("cape")) s += rects(DOG.medal);
+    if (K.extra.length) s += rects(K.extra);
     if (gear.includes("helm")) s += rects(DOG.helm);
-    return `<svg class="dog st${stageOf(xp)} ${cls || ""}" viewBox="0 -2 ${DOG.w} ${DOG.h + 2}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${s}</svg>`;
+    return `<svg class="dog k-${K.id} st${stageOf(xp)} ${cls || ""}" viewBox="0 -2 ${DOG.w} ${DOG.h + 2}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${s}</svg>`;
   }
   const torch = () => svg(4, 9, rects([[1, 3, 2, 6, "o"], [1, 4, 2, 5, "e"], [0, 0, 4, 4, "f"], [1, 1, 2, 2, "y"], [1, 0, 1, 1, "y"]]), "torch");
 
@@ -134,12 +161,12 @@
   const ghostAt = (trace, t) => trace.filter((x) => x <= t).length;
   const raceGoal = (trace) => Math.max(trace.length, 8) + 1;
   const pos = (n, goal) => Math.min(100, Math.round((n / goal) * 1000) / 10);
-  function raceHTML(xp) {
+  function raceHTML(xp, kind) {
     return `<div class="race" id="race" aria-label="Rennen gegen deinen Rekord"><i id="tm"></i><span class="rlane"></span>
-      <span class="runner ghost" id="rghost">${dog(0, "run")}</span><span class="runner me" id="rme">${dog(xp, "run")}</span><span class="rflag">🏁</span></div>`;
+      <span class="runner ghost" id="rghost">${dog(0, "run")}</span><span class="runner me" id="rme">${dog(xp, "run", "", kind)}</span><span class="rflag">🏁</span></div>`;
   }
 
-  const api = { PAL, DOG, STAGES, GEAR, BOSSES, PROJECTS, BLOCK, stageOf, growth, gearOf, dog, torch, bossSvg, bossFor, bossHp, cells, building, projectSvg, ghostTrace, ghostAt, raceGoal, pos, raceHTML };
+  const api = { KINDS, kindOf, SNACKS, coins, stageName, PAL, DOG, STAGES, GEAR, BOSSES, PROJECTS, BLOCK, stageOf, growth, gearOf, dog, torch, bossSvg, bossFor, bossHp, cells, building, projectSvg, ghostTrace, ghostAt, raceGoal, pos, raceHTML };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DEBegleiter = api;
 })(typeof self !== "undefined" ? self : this);

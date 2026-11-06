@@ -305,11 +305,11 @@
     return { n, fin, text: `🧱 +${n} ${n === 1 ? "Block" : "Blöcke"} (${where})${fin ? ` · 🏠 ${fin.name} fertig gebaut!` : ""}` };
   }
   function petWidget() {
-    const p = pet(), xp = totalXp(), g = B.growth(xp), happy = active(dayKey());
+    const p = pet(), xp = totalXp(), g = B.growth(xp, p.kind), happy = active(dayKey());
     let bubble = "";
     if (S.askedName && p.lastGreet !== dayKey()) { p.lastGreet = dayKey(); save(); bubble = `<span class="bubble">Wuff! Da bist du ja${S.name ? ", " + esc(S.name) : ""}!</span>`; }
     else if (!happy) bubble = `<span class="bubble soft">Ich warte auf dich!</span>`;
-    return `<button class="petw ${happy ? "happy" : "wait"}" data-act="pet" aria-label="Mein Hund ${esc(p.name)}">${B.dog(xp)}<span class="pinfo"><b>${esc(p.name)}</b><small>${g.name}</small><span class="pbar"><i style="width:${g.pct}%"></i></span></span>${bubble}</button>`;
+    return `<button class="petw ${happy ? "happy" : "wait"}" data-act="pet" aria-label="Mein ${esc(B.kindOf(p.kind).word)} ${esc(p.name)}">${B.dog(xp, "", "", p.kind)}<span class="pinfo"><b>${esc(p.name)}</b><small>${g.name}</small><span class="pbar"><i style="width:${g.pct}%"></i></span></span>${bubble}</button>`;
   }
   // kleiner Hund in der Leiste oben: hüpft, macht Salto, legt den Kopf schief
   function petReact(kind) {
@@ -320,29 +320,50 @@
     void d.offsetWidth;
     d.classList.add(kind);
   }
-  const gdog = () => `<span class="gdog" id="gdog">${B.dog(totalXp(), "run")}</span>`;
+  const gdog = () => `<span class="gdog" id="gdog">${B.dog(totalXp(), "run", "", pet().kind)}</span>`;
 
   function renderPet() {
-    const p = pet(), xp = totalXp(), g = B.growth(xp), gear = B.gearOf(xp), bd = B.building(p.blocks || 0);
+    const p = pet(), xp = totalXp(), g = B.growth(xp, p.kind), gear = B.gearOf(xp), bd = B.building(p.blocks || 0);
+    const K = B.kindOf(p.kind), coins = B.coins(xp, p.spent), full = p.fullDay === dayKey() ? p.full || 0 : 0;
     const GI = { scarf: "🧣", helm: "⛑️", torch: "🔥", cape: "🦸" };
     const proj = bd.cur
       ? `<h2>Bauprojekt: ${bd.cur.name}</h2><div class="build">${B.projectSvg(bd.cur, bd.placed)}${gear.includes("torch") ? B.torch() : ""}</div><p class="bstat"><b>${bd.placed} von ${bd.cur.size} Blöcken</b>${bd.done.length ? ` · Fertig: ${bd.done.map((id) => B.PROJECTS.find((x) => x.id === id).name).join(", ")}` : ""}</p>`
       : `<h2>Alle Bauprojekte fertig! 🏆</h2><div class="build">${B.PROJECTS.map((x) => B.projectSvg(x, x.size, "small")).join("")}</div><p class="bstat"><b>Du bist Baumeister!</b> ${bd.bonus} Bonus-Blöcke</p>`;
-    app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein Hund</h1></div>
+    app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein ${esc(K.word)}</h1></div>
       <section class="card petstage">
-        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp)}</button>
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind)}</button>
         <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
           <div class="pbar big"><i style="width:${g.pct}%"></i></div>
           <p class="muted">${g.next ? `Noch ${g.need} Punkte, dann wird ${esc(p.name)} zum ${g.next}. Punkte gibt es in jedem Fach.` : "Ganz groß geworden!"}</p>
           <p class="muted">Tippe auf ${esc(p.name)} zum Streicheln.</p>
-          <form class="rename" id="rnf" autocomplete="off"><input id="dogname" type="text" maxlength="14" value="${esc(p.name)}" aria-label="Name des Hundes" autocapitalize="words" autocorrect="off" spellcheck="false"><button class="btn ghost" type="submit">Umbenennen</button></form>
+          <form class="rename" id="rnf" autocomplete="off"><input id="dogname" type="text" maxlength="14" value="${esc(p.name)}" aria-label="Name des Tiers" autocapitalize="words" autocorrect="off" spellcheck="false"><button class="btn ghost" type="submit">Umbenennen</button></form>
         </div>
       </section>
+      <section class="card"><h2>Welches Tier möchtest du?</h2><div class="kinds">${B.KINDS.map((k) => `<button class="kind ${k.id === K.id ? "on" : ""}" data-act="petkind" data-v="${k.id}" aria-pressed="${k.id === K.id}">${B.dog(0, "", "", k.id)}<b>${k.name}</b></button>`).join("")}</div></section>
+      <section class="card"><h2>Snacks <span class="coins" id="coins">🪙 ${coins}</span></h2>
+        <div class="pbar big sat" aria-label="Satt: ${full} von 100"><i style="width:${full}%"></i></div>
+        <div class="snacks">${B.SNACKS.map((x) => `<button class="snack" data-act="feed" data-v="${x.id}" ${coins < x.price ? "disabled" : ""}><span class="si">${x.icon}</span><b>${x.name}</b><small>🪙 ${x.price}</small></button>`).join("")}</div>
+        <p class="muted">Münzen: für je 10 Punkte aus allen Fächern bekommst du eine. ${esc(p.name)} wird nie traurig, Snacks sind nur zum Freuen.</p></section>
       <section class="card"><h2>Ausrüstung</h2><div class="gear">${B.GEAR.map((x) => `<div class="gitem ${gear.includes(x.id) ? "got" : ""}"><span class="gi">${GI[x.id]}</span><b>${x.name}</b><small>${gear.includes(x.id) ? "freigeschaltet" : `ab ${x.xp} Punkten`}</small></div>`).join("")}</div></section>
       <section class="card">${proj}<p class="muted">Blöcke bekommst du so: Etappe geschafft +3 · Boss besiegt +2 (großer Boss +3) · Runde geschafft +1 · neuer Rekord oder Probe +2</p></section>
       <section class="card"><h2>Boss-Pokale</h2><div class="trophies">${B.BOSSES.map((b) => { const n = (p.bosses || {})[b.id] || 0; return `<div class="trophy ${n ? "got" : ""}">${B.bossSvg(b)}<b>${n ? b.name : "???"}</b><small>${n ? n + "× besiegt" : "noch nicht getroffen"}</small></div>`; }).join("")}</div></section>
     </div>`;
     $("#rnf").onsubmit = (e) => { e.preventDefault(); const v = ($("#dogname").value || "").trim(); if (v) { pet().name = v; save(); toast("🐶 Hallo " + v + "!"); renderPet(); } };
+  }
+  function petKind(id) {
+    if (!B.KINDS.some((k) => k.id === id)) return;
+    pet().kind = id; save(); toast(`${B.kindOf(id).name} ausgewählt!`); tone("win"); renderPet();
+  }
+  function petFeed(id) {
+    const p = pet(), sn = B.SNACKS.find((x) => x.id === id);
+    if (!sn || B.coins(totalXp(), p.spent) < sn.price) return;
+    p.spent = (p.spent || 0) + sn.price;
+    p.fed = p.fed || {}; p.fed[id] = (p.fed[id] || 0) + 1;
+    p.full = Math.min(100, (p.fullDay === dayKey() ? p.full || 0 : 0) + sn.full); p.fullDay = dayKey();
+    save(); tone("wuff"); renderPet();
+    const d = $("#bigdog");
+    if (d && !quiet()) { d.classList.add("pat"); for (let i = 0; i < 3; i++) { const h = document.createElement("span"); h.className = "heart"; h.textContent = sn.icon; h.style.left = 25 + i * 22 + "%"; h.style.animationDelay = i * 0.12 + "s"; d.appendChild(h); setTimeout(() => h.remove(), 1600); } }
+    toast(`${sn.icon} ${p.name} mampft ${sn.name}. Lecker!`);
   }
   function petPet() {
     const d = $("#bigdog");
@@ -410,7 +431,7 @@
 
   /* ================= Rennen gegen den eigenen Rekord (Blitzrunde) ================= */
   const race = {
-    html: () => B.raceHTML(totalXp()),
+    html: () => B.raceHTML(totalXp(), pet().kind),
     setup(r, trace, ms) { r.ghost = B.ghostTrace(trace, ms); r.goal = B.raceGoal(r.ghost); r.trace = []; r.ahead = false; r.raceMs = ms; },
     hit(r) { (r.trace = r.trace || []).push(Date.now() - r.t0); },
     update(r) {
@@ -534,7 +555,7 @@
     m.className = "modal";
     m.innerHTML = `<div class="card"><h1>Willkommen!</h1><p>Wie heißt du? Der Name bleibt nur auf diesem iPad.</p><input type="text" id="nm" placeholder="Dein Vorname" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20">
       <div class="dogrow">${B.dog(0, "happy")}<label for="dn">Das ist dein Hund. Er wächst, wenn du übst. Wie soll er heißen?</label></div>
-      <input type="text" id="dn" value="${esc(pet().name)}" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="14" aria-label="Name des Hundes">
+      <input type="text" id="dn" value="${esc(pet().name)}" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="14" aria-label="Name des Tiers">
       <div class="row"><button class="btn" data-act="savename">Los geht's</button><button class="btn ghost" data-act="skipname">Überspringen</button></div></div>`;
     document.body.appendChild(m);
   }
@@ -1544,6 +1565,8 @@
       case "savename": S.name = ($("#nm").value || "").trim(); pet().name = ($("#dn") && $("#dn").value || "").trim() || pet().name; S.askedName = true; save(); closeModal(); renderHome(); break;
       case "pet": go("pet"); break;
       case "petpet": petPet(); break;
+      case "petkind": petKind(v); break;
+      case "feed": petFeed(v); break;
       case "skipname": S.askedName = true; save(); closeModal(); break;
       case "savesettings": S.name = ($("#nm2").value || "").trim(); S.sound = $("#snd").checked; S.speak = $("#spk").checked; save(); closeModal(); renderHome(); break;
       case "reset":
