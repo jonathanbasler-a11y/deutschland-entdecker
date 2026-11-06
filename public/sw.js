@@ -1,5 +1,5 @@
 // Offline-Modus: mit Internet immer die neueste Version laden, ohne Internet aus dem Speicher.
-const CACHE = "de-entdecker-v19";
+const CACHE = "de-entdecker-v20";
 const FILES = ["./", "index.html", "style.css", "logic.js", "rechnen-logic.js", "begleiter.js", "mapdata.js", "content.js", "fach-rechnen.js", "kompass-logic.js", "kompass-data.js", "kompass-text.js", "kompass-geo.js", "kompass-mathe2.js", "kompass-zahlraum.js", "kompass-original.js", "fach-kompass.js", "app.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

@@ -402,6 +402,7 @@ body.calm .gbar .combo.hot, body.calm .mans.empty::after { animation: none; }
   .sgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scell { font-size: 1rem; padding: 6px 8px; }
   .scell .sa { flex: 1 0 auto; min-width: 3em; }
+  .scell .sq { white-space: normal; overflow-wrap: anywhere; flex: 1 1 100%; }
   .scell .sn { display: none; }
   .x1 td { min-width: 30px; font-size: .75rem; }
 }
