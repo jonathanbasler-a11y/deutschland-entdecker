@@ -222,7 +222,44 @@ async function deStep(p, right = true) {
   await p.reload();
   await p.waitForFunction(() => window.__DE && window.__DE.S.pet.kind === "panda", null, { timeout: 6000 }).catch(() => {});
   check((await S(p)).pet.kind === "panda", "Beide Schlüssel gelöscht: Stand kommt aus IndexedDB zurück");
+  // Kaputte Schlüssel (JSON kaputt / Zahl): IndexedDB muss trotzdem wiederherstellen
+  await p.click('[data-act="skipname"]').catch(() => {});
+  await p.click('[data-act="pet"]');
+  await p.click('.kind[data-v="tiger"]');
+  await p.waitForTimeout(500);
+  await ev(p, "(localStorage.setItem('deutschland-entdecker-v1', '{kaputt'), localStorage.setItem('deutschland-entdecker-v1-bak', '5'), true)");
+  await p.reload();
+  await p.waitForFunction(() => window.__DE && window.__DE.S.pet && window.__DE.S.pet.kind === "tiger", null, { timeout: 8000 }).catch(() => {});
+  await p.click('[data-act="skipname"]').catch(() => {});
+  check((await S(p)).pet.kind === "tiger", "Kaputte Schlüssel: Stand kommt aus IndexedDB zurück");
+  // Unbekanntes Zubehör in worn: Anziehen darf nicht abstürzen
+  await p.click('[data-act="pet"]');
+  await ev(p, "(window.__DE.S.pet.spent = 0, window.__DE.S.pet.acc = ['krone','brille'], window.__DE.S.pet.worn = ['ghost-acc', 'krone'], true)");
+  await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
+  await p.click('.snack[data-v="brille"]');
+  check((await S(p)).pet.worn.includes("brille") && !(await S(p)).pet.worn.includes("ghost-acc"), "Unbekanntes Zubehör: Anziehen bereinigt und stürzt nicht ab");
   check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
+  // Sicherungsdatei laden (Eltern-Übersicht)
+  async function openParents() {
+    if (!(await p.$("#gate"))) {
+      if (!(await p.$('[data-act="settings"]'))) await p.click('[data-act="home"]');
+      await p.click('[data-act="settings"]');
+      await p.waitForSelector("#gate", { timeout: 3000 });
+    }
+    const box = await (await p.$("#gate")).boundingBox();
+    await p.mouse.move(box.x + 20, box.y + 10); await p.mouse.down();
+    await p.waitForSelector(".parents", { timeout: 3000 }); await p.mouse.up();
+  }
+  await openParents();
+  const restore = JSON.stringify({ askedName: true, gift2: true, xp: 42, pet: { name: "BackupHund", kind: "wolf", blocks: 0, bosses: {}, lastGreet: "", petted: 0, stage: 0, gear: 0 } });
+  await p.setInputFiles("#bkfile", { name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(restore) });
+  await p.waitForFunction(() => window.__DE && window.__DE.S.pet && window.__DE.S.pet.name === "BackupHund", null, { timeout: 6000 }).catch(() => {});
+  check((await S(p)).pet.name === "BackupHund" && (await S(p)).pet.kind === "wolf" && (await S(p)).xp === 42, "Sicherung laden stellt Name, Tier und Punkte wieder her");
+  await openParents();
+  await p.setInputFiles("#bkfile", { name: "nein.json", mimeType: "application/json", buffer: Buffer.from('{"hello":1}') });
+  await p.waitForTimeout(500);
+  check((await S(p)).pet.name === "BackupHund" && (await S(p)).xp === 42, "Ungültige Sicherungsdatei ändert den Stand nicht");
+  check(p.errors.length === 0, "keine Konsolenfehler nach Sicherung " + p.errors.join(" | "));
   await ctx.close();
 }
 

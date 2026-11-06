@@ -21,7 +21,8 @@
   // Spielstand mehrfach sichern: Hauptschlüssel, zweite Kopie, IndexedDB-Spiegel, dazu Sicherungsdatei (Eltern-Übersicht)
   const BAK = KEY + "-bak";
   const readKey = (k) => { try { const t = localStorage.getItem(k); if (!t) return null; const o = JSON.parse(t); return o && typeof o === "object" && !Array.isArray(o) ? o : null; } catch (e) { try { localStorage.setItem(k + "-defekt", localStorage.getItem(k)); } catch (e2) { /* egal */ } return null; } };
-  { const raw = readKey(KEY) || readKey(BAK); if (raw) S = Object.assign(defaults(), raw); }
+  const primary = readKey(KEY), bak = readKey(BAK);
+  { const raw = primary || bak; if (raw) { S = Object.assign(defaults(), raw); try { sessionStorage.removeItem("de-restored"); } catch (e) { /* egal */ } } }
   const idb = (fn) => { try { const q = indexedDB.open("de-entdecker-save", 1); q.onupgradeneeded = () => q.result.createObjectStore("s"); q.onsuccess = () => { try { fn(q.result); } catch (e) { /* egal */ } }; } catch (e) { /* ohne IndexedDB weiter */ } };
   // Aufholbonus: solange er läuft, zählen neue Punkte aus allen Fächern mehrfach (Zusatz steht in S.boost.extra)
   const rawXp = () => S.xp + FAECH.reduce((a, f) => a + (f.xp ? f.xp() : 0), 0);
@@ -40,9 +41,10 @@
     if (t) idb((db) => db.transaction("s", "readwrite").objectStore("s").put(t, "state"));
   };
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* egal */ }
-  // Speicher des Browsers leer, aber IndexedDB hat noch den Stand: wiederherstellen (einmal pro Sitzung)
-  if (!localStorage.getItem(KEY) && !localStorage.getItem(BAK) && !sessionStorage.getItem("de-restored")) {
-    idb((db) => { const g = db.transaction("s").objectStore("s").get("state"); g.onsuccess = () => { if (g.result) { try { localStorage.setItem(KEY, g.result); sessionStorage.setItem("de-restored", "1"); location.reload(); } catch (e) { /* egal */ } } }; });
+  // Kein lesbarer Stand in localStorage (fehlt oder kaputt), aber IndexedDB hat noch einen: wiederherstellen.
+  // Flag nur gegen Endlos-Neuladen; nach erfolgreichem Lesen wird es wieder gelöscht (siehe oben).
+  if (!primary && !bak && !sessionStorage.getItem("de-restored")) {
+    idb((db) => { const g = db.transaction("s").objectStore("s").get("state"); g.onsuccess = () => { if (g.result) { try { localStorage.setItem(KEY, g.result); localStorage.setItem(BAK, g.result); sessionStorage.setItem("de-restored", "1"); location.reload(); } catch (e) { /* egal */ } } }; });
   }
   // Sicherungsdatei laden und speichern
   const backupDownload = () => {
@@ -407,7 +409,7 @@
     if (!p[key].includes(id)) {
       if (B.coins(totalXp(), p.spent) < it.price) return;
       p.spent = (p.spent || 0) + it.price; p[key].push(id);
-      if (kind === "acc") { p.worn = (p.worn || []).filter((w) => B.ACC.find((x) => x.id === w).slot !== it.slot).concat(id); }
+      if (kind === "acc") { p.worn = (p.worn || []).filter((w) => { const a = B.ACC.find((x) => x.id === w); return a && a.slot !== it.slot; }).concat(id); }
       if (kind === "room") p.room = id;
       toast(`${it.icon || "✨"} ${it.name}!`); tone("win");
     }
@@ -417,7 +419,7 @@
     const p = pet(), it = B.ACC.find((x) => x.id === id);
     if (!it || !(p.acc || []).includes(id)) return;
     const on = (p.worn || []).includes(id);
-    p.worn = (p.worn || []).filter((w) => w !== id && B.ACC.find((x) => x.id === w).slot !== it.slot);
+    p.worn = (p.worn || []).filter((w) => { if (w === id) return false; const a = B.ACC.find((x) => x.id === w); return a && a.slot !== it.slot; });
     if (!on) p.worn.push(id);
     save(); renderPet();
   }
