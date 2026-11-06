@@ -248,6 +248,75 @@ req("../public/kompass-mathe2.js");
   ok(Object.keys(counts).length === NEW.length, "alle neuen Arten erzeugt");
   ok(K.compsOfArea("ma.daten").length === 11, "Daten und Zufall: 11 Arten (" + K.compsOfArea("ma.daten").length + ")");
 }
+// Zahlraum bis 1 Million (nach einer echten Klassenarbeit): jede Lösung unabhängig aus Text und Bild nachgerechnet
+req("../public/kompass-zahlraum.js");
+{
+  const ZR = ["ma.nachbarstelle", "ma.nachbarwahl", "ma.strahllesen", "ma.plaettchen", "ma.tafelwort", "ma.zahlwortschreiben", "ma.verwechsel"];
+  const P = { Zehner: 10, Hunderter: 100, Tausender: 1000, Zehntausender: 10000, Hunderttausender: 100000 };
+  const nums2 = (s) => (s.match(/\d+(?:\.\d{3})*/g) || []).map((x) => Number(x.replace(/\./g, "")));
+  const COLS = ["HT", "ZT", "T", "H", "Z", "E"], pw = (i) => 10 ** (5 - i);
+  const seen = {};
+  for (const id of ZR) for (let seed = 1; seed <= 400; seed++) for (const lv of [1, 2]) {
+    const t = K.task(id, seed * 41 + lv, lv), where = `${id} ${seed}: ${t.q}`;
+    seen[id] = (seen[id] || 0) + 1;
+    ok(t.q && t.tip && t.explain, "Text, Tipp, Erklärung: " + where);
+    if (t.type === "nums") {
+      ok(t.fields.length >= 2 && t.fields.every((f) => Number.isInteger(f.ans) && f.ans >= 0), "Felder: " + where);
+      ok(K.check(t, t.fields.map((f) => String(f.ans))).ok && !K.check(t, t.fields.map((f) => String(f.ans + 1))).ok && !K.check(t, t.fields.map(() => "")).ok, "Felder prüfen: " + where);
+    }
+    if (t.type === "choice") ok(new Set(t.opts).size === t.opts.length && K.check(t, t.ans).ok, "Auswahl: " + where);
+    if (t.type === "multi") ok(t.ans.length >= 1 && t.ans.length < t.opts.length && K.check(t, t.ans).ok, "Mehrfach: " + where);
+    if (id === "ma.nachbarstelle") {
+      const name = /Nachbar(\w+) von/.exec(t.q)[1], p = P[name.charAt(0).toUpperCase() + name.slice(1)], n = nums2(t.q)[0], [lo, hi] = t.fields.map((f) => f.ans);
+      ok(lo % p === 0 && hi - lo === p && lo < n && n < hi, "Nachbar-Stellenwert: " + where);
+    }
+    if (id === "ma.nachbarwahl") {
+      const name = /Nachbar(\w+) von/.exec(t.q)[1], p = P[name.charAt(0).toUpperCase() + name.slice(1)], n = nums2(t.q)[0], [lo, hi] = nums2(t.opts[t.ans]);
+      ok(lo % p === 0 && hi - lo === p && lo < n && n < hi, "Nachbar-Auswahl: " + where);
+      ok(t.opts.filter((o) => { const [a, b] = nums2(o); return a % p === 0 && b - a === p && a < n && n < b; }).length === 1, "genau eine richtige Auswahl: " + where);
+    }
+    if (id === "ma.strahllesen") {
+      const labels = [...t.fig.matchAll(/font-size="16"[^>]*>([\d.]+)</g)].map((m) => Number(m[1].replace(/\./g, ""))), a = Math.min(...labels), b = Math.max(...labels);
+      const arrows = [...t.fig.matchAll(/<path d="M([\d.]+) 86 l-8 -18 h16 z"[^>]*\/>(?:<text x="[\d.]+" y="60"[^>]*>([ABC])<)?/g)].map((m) => ({ v: a + ((Number(m[1]) - 50) / 540) * (b - a), l: m[2] }));
+      const ticks = (t.fig.match(/<line [^>]*stroke-width="(?:1\.5|3)"/g) || []).length, mstep = (b - a) / (ticks - 1), near = (x, y) => Math.abs(x - y) < mstep / 2;
+      if (t.type === "num") ok(arrows.length === 1 && near(arrows[0].v, t.ans) && (t.ans - a) % mstep === 0, `Pfeil im Bild = Lösung (${arrows[0] && arrows[0].v} / ${t.ans}): ` + where);
+      else { const want = nums2(t.q)[0], letter = "ABC"[t.ans]; ok(arrows.length === 3 && near(arrows.find((x) => x.l === letter).v, want) && arrows.filter((x) => near(x.v, want)).length === 1, "richtiger Pfeil: " + where); }
+    }
+    if (id === "ma.plaettchen") {
+      const xs = (i) => 4 + i * 52 + (i >= 3 ? 14 : 0), d = [0, 1, 2, 3, 4, 5].map((i) => [...t.fig.matchAll(/<circle cx="([\d.]+)"/g)].filter((m) => +m[1] > xs(i) && +m[1] < xs(i) + 52).length);
+      const n = d.reduce((a, x, i) => a + x * pw(i), 0), codes = [...t.q.matchAll(/\((HT|ZT|T|H|Z|E)\)/g)].map((m) => COLS.indexOf(m[1]));
+      if (t.type === "num") {
+        const want = /hinzu/.test(t.q) ? n + pw(codes[0]) : /weg/.test(t.q) ? n - pw(codes[0]) : n - pw(codes[0]) + pw(codes[1]);
+        ok(want === t.ans && d.every((x) => x <= 9), "Plättchen-Rechnung: " + where);
+      } else {
+        const S = new Set(), can = (f) => d[f] > 0, cap = (f) => d[f] < 9;
+        if (/verschiebe/i.test(t.q)) { for (let f = 0; f < 6; f++) for (let g = 0; g < 6; g++) if (f !== g && can(f) && cap(g)) S.add(n - pw(f) + pw(g)); }
+        else if (/hinzu/.test(t.q)) { for (let f = 0; f < 6; f++) for (let g = f; g < 6; g++) if (f === g ? d[f] <= 7 : cap(f) && cap(g)) S.add(n + pw(f) + pw(g)); }
+        else for (let f = 0; f < 6; f++) for (let g = f; g < 6; g++) if (f === g ? d[f] >= 2 : can(f) && can(g)) S.add(n - pw(f) - pw(g));
+        ok(t.opts.every((o, i) => t.ans.includes(i) === S.has(nums2(o)[0])), "Plättchen: gültige Zahlen stimmen: " + where);
+      }
+    }
+    if (id === "ma.tafelwort") {
+      const n = t.fields.reduce((a, f, i) => a + f.ans * pw(i), 0);
+      ok(t.fields.every((f) => f.ans >= 0 && f.ans <= 9) && t.fields.length === 6, "6 Ziffern: " + where);
+      ok(/Zahl [\d.]+ in/.test(t.q) ? nums2(t.q)[0] === n : t.q.endsWith(K.words(n)), "Zahlwort/Zahl passt zur Tafel: " + where);
+    }
+    if (id === "ma.zahlwortschreiben") {
+      const n = nums2(t.q)[0];
+      ok(t.ans[0] === K.words(n) && K.check(t, K.words(n).toUpperCase()).ok && K.check(t, K.words(n).replace("ß", "ss")).ok && !K.check(t, K.words(n + 1)).ok, "Zahlwort: " + where);
+    }
+    if (id === "ma.verwechsel") {
+      if (/^Welche Zahl ist/.test(t.q)) { const w = /ist: (.*)\?$/.exec(t.q)[1]; ok(t.opts.filter((o) => K.words(nums2(o)[0]) === w).length === 1 && K.words(nums2(t.opts[t.ans])[0]) === w, "Wort zur Zahl: " + where); }
+      else { const n = nums2(t.q)[0]; ok(t.opts[t.ans] === K.words(n), "Zahl zum Wort: " + where); }
+    }
+  }
+  ok(Object.keys(seen).length === ZR.length, "alle Zahlraum-Arten erzeugt");
+  // Die Fehler aus der Klassenarbeit müssen als Falschantwort erkannt werden
+  const nb = K.task("ma.nachbarstelle", 1, 2), fake = { type: "nums", fields: [{ label: "u", ans: 87600 }, { label: "o", ans: 87700 }] };
+  ok(!K.check(fake, ["87.554", "87.754"]).ok && K.check(fake, ["87.600", "87.700"]).ok, "±100 statt glatter Nachbar-Stellenwert ist falsch");
+  const tw = { type: "nums", digit: true, fields: ["0", "3", "3", "1", "0", "0"].map((x, i) => ({ label: i, ans: +x })) };
+  ok(!K.check(tw, ["3", "3", "0", "1", "0", "0"]).ok && K.check(tw, ["0", "3", "3", "1", "0", "0"]).ok, "33.100 um eine Stelle verschoben ist falsch");
+}
 // Einzelfälle, die stimmen müssen
 ok(K.task("de.recht.gross", 0).ans.length === 4, "Groß: Satz 1 hat 4 Wörter");
 ok(K.check(K.task("de.recht.trenne", 0), "Unsere Mannschaft hat das letzte Spiel verloren.").ok, "Wörter trennen: richtiger Satz");

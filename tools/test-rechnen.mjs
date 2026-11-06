@@ -8,10 +8,10 @@ const R = createRequire(import.meta.url)("../public/rechnen-logic.js");
 function seeded(s) { return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const rnd = seeded(42);
 
-assert.equal(R.LEVELS.length, 9);
+assert.equal(R.LEVELS.length, 10);
 // Testpfad (was im Kopfrechentest drankommt) zuerst, dann die freiwilligen Extras
 assert.deepEqual(R.LEVELS.filter((l) => l.path).map((l) => l.id), ["k-mal", "k-geteilt", "z-mal", "stelle"]);
-assert.deepEqual(R.LEVELS.filter((l) => l.extra).map((l) => l.id), ["null", "z-geteilt", "h", "zz", "gross"]);
+assert.deepEqual(R.LEVELS.filter((l) => l.extra).map((l) => l.id), ["null", "z-geteilt", "h", "zz", "gross", "zv"]);
 assert.ok(R.LEVELS.every((l) => !!l.path !== !!l.extra), "jede Stufe ist entweder Testpfad oder Extra");
 assert.ok(R.LEVEL["k-mal"].n === 1 && R.LEVEL.stelle.n === 4 && R.LEVEL.gross.n === 9);
 
@@ -28,6 +28,7 @@ for (const lv of R.LEVELS) {
     if (lv.id !== "k-mal" && lv.id !== "stelle") assert.ok(t.a >= 2 && t.b >= 2, "keine 1er außer im 1×1: " + t.key);
     if (t.op === "·") assert.equal(t.a * t.b, t.ans);
     else if (t.op === "+") assert.equal(t.a + t.b, t.ans);
+    else if (t.op === "−") assert.equal(t.a - t.b, t.ans);
     else { assert.equal(t.a % t.b, 0, "Teilen ohne Rest " + t.key); assert.equal(t.a / t.b, t.ans); }
     assert.deepEqual(R.fromKey(t.key), t, "fromKey " + t.key);
     if (lv.id === "gross") assert.ok(Math.max(t.a, t.b, t.ans) <= 999, "11er-19er höchstens 999: " + t.key);
@@ -35,6 +36,12 @@ for (const lv of R.LEVELS) {
     if (lv.id === "k-mal") assert.ok(Math.max(t.a, t.b) <= 11, "1×1 mal bis 11: " + t.key);
     if (lv.id === "k-geteilt") assert.ok(Math.max(t.b, t.ans) <= 10, "1×1 geteilt: " + t.key);
     if (lv.id === "z-mal") assert.ok(t.op === "·" && t.ans <= 1500, "Zehner/Hunderter mal höchstens 1500: " + t.key);
+    if (lv.id === "zv") {
+      // nur eine Stelle ändert sich, ohne Übertrag, Ergebnis unter einer Million
+      const p = t.b, dg = Math.floor(t.a / p) % 10;
+      assert.ok([10, 100, 1000, 10000, 100000].includes(p) && t.a >= 10000 && t.ans < 1000000 && t.ans >= 1, "Zahl verändern: " + t.key);
+      assert.ok(t.op === "+" ? dg < 9 && Math.floor(t.ans / p) % 10 === dg + 1 : dg > 0 && Math.floor(t.ans / p) % 10 === dg - 1, "ohne Übertrag: " + t.key);
+    }
     if (lv.id === "stelle") {
       if (t.op === "+") { const pa = String(t.a).replace(/0+$/, ""), pb = String(t.b).replace(/0+$/, ""); assert.ok(pa.length === 1 && pb.length === 1 && String(t.a).length !== String(t.b).length, "Stellenwert-Plus mit glatten Zahlen an verschiedenen Stellen: " + t.key); }
       else assert.ok(t.a === 1 || t.b === 1, "große Zahl mal 1: " + t.key);

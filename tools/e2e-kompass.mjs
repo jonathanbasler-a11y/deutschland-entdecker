@@ -81,6 +81,14 @@ async function answer(p, right = true) {
     for (const i of want) await p.tap(`[data-act="k-gap"][data-v="${i}"]`);
     return p.tap("#kgo");
   }
+  if (t.type === "nums") {
+    for (let i = 0; i < t.fields.length; i++) {
+      const a = t.fields[i].ans, s = String(right || i > 0 ? a : t.digit ? (a + 1) % 10 : a + 1);
+      await keys(p, s.replace(/\D/g, ""));
+      if (!t.digit && i < t.fields.length - 1) await p.tap('.key[data-v="ok"]');
+    }
+    return p.tap('.key[data-v="ok"]');
+  }
   if (t.type === "grid") {
     if (right) for (const c of t.ans) await p.tap(`[data-act="k-cell"][data-v="${c.join(",")}"]`);
     else {
@@ -225,10 +233,11 @@ async function openParents(p) {
   const back = async () => { await p.click('[data-act="k-quit"]'); await p.click('[data-act="subject"][data-v="kompass"]').catch(() => {}); };
   const cases = [["de.satzmatch", "match"], ["de.zeitmatch", "match"], ["de.satzcut", "cut"], ["de.recht.trenne", "write"], ["de.recht.gross", "pick"], ["de.recht.rede", "choice"],
     ["ma.raum.spiegeln", "grid"], ["ma.raum.netzergaenzen", "grid"], ["ma.raum.netz", "multi"], ["ma.raum.ansicht", "choice"], ["ma.raum.gleichesgebaeude", "choice"], ["ma.raum.gebaeude", "num"], ["ma.raum.flaeche", "num"],
+    ["ma.nachbarstelle", "nums"], ["ma.tafelwort", "nums"], ["ma.plaettchen", "*"], ["ma.strahllesen", "*"], ["ma.zahlwortschreiben", "write"], ["ma.verwechsel", "choice"],
     ["ma.daten.balkenzeichnen", "grid"], ["ma.daten.zufall", "choice"], ["ma.daten.diagramm", "choice"], ["ma.einheit", "match"], ["ma.uhr", "choice"]];
   for (const [id, type] of cases) {
     await p.evaluate((id) => window.__DE_K.play([id]), id);
-    check((await cur(p)).type === type, `${id}: Typ ${type}`);
+    check(type === "*" || (await cur(p)).type === type, `${id}: Typ ${type}`);
     await answer(p, false);
     check((await p.textContent("#fb")).includes("💡"), `${id}: erster Fehler gibt Tipp`);
     await answer(p, false);
@@ -265,6 +274,30 @@ async function openParents(p) {
   check(/Lesetext/.test(lab) && !lab.includes("Kaugummi"), "Lesen: nächster Text ist ein anderer: " + lab);
   await shot(p, "lesen");
   check(p.errors.length === 0, "keine Konsolenfehler (neue Typen) " + p.errors.join(" | "));
+  await ctx.close();
+}
+
+// 3c) Könnerblatt: Pflanzenstufen wie in der Schule, "Das übe ich als Nächstes" startet die Aufgabenart
+{
+  const { ctx, p } = await fresh("2026-11-12");
+  await p.click('[data-act="k-konner"]');
+  check(!!(await p.$(".konnerview")) && (await p.textContent(".konnerview h1")) === "Mein Könnerblatt", "Könnerblatt öffnet");
+  check((await p.$$(".konnertab thead th")).length >= 10 && (await p.textContent(".konnertab thead")).includes("🌸"), "Stufen Samen bis Blume");
+  check((await p.$$(".konnertab tbody tr:not(.area)")).length >= 100, "viele „Ich kann“-Zeilen (" + (await p.$$(".konnertab tbody tr:not(.area)")).length + ")");
+  check((await p.textContent(".konnerview .muted")).includes("Noch nichts"), "Ohne Übung: noch nichts zu üben");
+  // eine Aufgabenart falsch üben -> sie steht unter „Als Nächstes“
+  await p.click('[data-act="home"]');
+  await p.evaluate(() => window.__DE_K.play(["ma.nachbarstelle"]));
+  await answer(p, false); await answer(p, false);
+  await p.click('[data-act="k-quit"]'); await p.click('[data-act="subject"][data-v="kompass"]').catch(() => {});
+  await p.click('[data-act="k-konner"]');
+  check(!!(await p.$('.konnerview [data-act="k-comp"][data-v="ma.nachbarstelle"]')), "Falsch geübte Aufgabenart steht unter „Das übe ich als Nächstes“");
+  check((await p.$$(".konnertab td.on")).length >= 1, "Pflanze der geübten Aufgabenart steht in der Tabelle");
+  await p.click('.konnerview [data-act="k-comp"][data-v="ma.nachbarstelle"]');
+  check((await cur(p)).comp === "ma.nachbarstelle", "Knopf startet genau diese Aufgabenart");
+  check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Könnerblatt/Aufgabe ohne seitliches Scrollen");
+  await shot(p, "konner");
+  check(p.errors.length === 0, "keine Konsolenfehler (Könnerblatt) " + p.errors.join(" | "));
   await ctx.close();
 }
 

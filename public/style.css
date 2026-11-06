@@ -683,3 +683,35 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .kgrid { width: 100%; max-width: 560px; height: auto; border: 3px solid #0b1d2e; border-radius: 6px; touch-action: manipulation; }
 .kgrid .kcell { cursor: pointer; }
 @media (max-width: 700px) { .kfig svg.geo { max-width: 300px; } .kopts .opt.figopt .kfo { max-width: 120px; } }
+
+/* Kompass: mehrere Zahlenfelder */
+.knums { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 4px 0 10px; }
+.kfield { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 130px; padding: 8px 14px; background: var(--panel2); border: 3px solid #0b1d2e; color: inherit; font: inherit; cursor: pointer; min-height: 64px; }
+.kfield small { color: var(--muted); font-size: .85rem; }
+.kfield b { font-size: 1.5rem; min-height: 1.9rem; letter-spacing: .02em; }
+.kfield.cur { border-color: #ffc83d; box-shadow: 0 0 0 3px rgba(255, 200, 61, .35); }
+.kfield.ok { border-color: #2f8f3a; background: #1f5f2c; }
+.kfield.sol { border-color: #b83232; background: #6d2a2a; }
+.kfield.bad { border-color: #b83232; }
+.knums.digits { flex-wrap: nowrap; gap: 6px; }
+.knums.digits .kfield { min-width: 0; flex: 1 1 0; padding: 6px 4px; }
+.knums.digits .kfield:nth-child(3) { margin-right: 10px; }
+@media (max-width: 700px) { .kfield { min-width: 100px; } }
+
+/* lange Wörter (Zahlwörter) umbrechen statt überlappen */
+.kqt, .kopts .opt, .kfield b, .kmo { overflow-wrap: anywhere; hyphens: auto; }
+.kopts.long { display: flex; flex-direction: column; gap: 10px; }
+.kopts.long .opt { text-align: left; width: 100%; }
+
+.kfig svg.geo.wide { max-width: 680px; }
+
+/* Könnerblatt */
+.konnertab { width: 100%; }
+.konnertab th:first-child { text-align: left; min-width: 180px; }
+.konnertab thead th { vertical-align: bottom; }
+.konnertab .pl { font-size: 1.5rem; display: block; }
+.konnertab thead small { font-weight: 400; color: var(--muted); }
+.konnertab tr.area th { background: #1d4468; text-align: left; }
+.konnertab td { font-size: 1.5rem; padding: 4px 8px; }
+.konnertab td.on { background: #1f5f2c; }
+.konnerview .ktabwrap { overflow-x: auto; align-items: stretch; }
