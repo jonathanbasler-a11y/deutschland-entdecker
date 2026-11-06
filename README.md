@@ -7,7 +7,7 @@ Lern-App fürs iPad, 4. Klasse, Baden-Württemberg. Oben wählt man das Fach:
 Name, Serie, Töne, ruhiger Modus, Vorlesen, Bewegungspause, Eltern-Übersicht und der Hund gelten für beide Fächer. Punkte, Ränge und Abzeichen hat jedes Fach für sich.
 
 ## 🧭 Kompass 4 (Deutsch und Mathe), Test am 18. und 19.11.2026
-Drittes Fach für die Lernstandserhebung Kompass 4 (je 45 Minuten, Papier). Ein Startcheck, ein 14-Tage-Plan (6.–19.11.) mit kurzen Etappen, Tipps und Boss, Übungen je Bereich mit Sternen. Aufgaben werden mit Startwert erzeugt und gegen eine unabhängige Nachrechnung getestet (`tools/test-kompass.mjs`, `tools/e2e-kompass.mjs`). Fertig: Deutsch Sprache untersuchen, Lesen (5 Texte, darunter die Originale Kaugummi 2025 und Wölfe 2024 mit Quelle IBBW) und Rechtschreiben; Mathe Zahlen, Größen, Muster. Offen: Raum und Form, Daten und Zufall, Probe-Modus.
+Drittes Fach für die Lernstandserhebung Kompass 4 (je 45 Minuten, Papier). Ein Startcheck, ein 14-Tage-Plan (6.–19.11.) mit kurzen Etappen, Tipps und Boss, Übungen je Bereich mit Sternen. Aufgaben werden mit Startwert erzeugt und gegen eine unabhängige Nachrechnung getestet (`tools/test-kompass.mjs`, `tools/e2e-kompass.mjs`). Fertig: Deutsch Sprache untersuchen, Lesen (5 Texte, darunter die Originale Kaugummi 2025 und Wölfe 2024 mit Quelle IBBW) und Rechtschreiben; Mathe Zahlen, Größen, Muster. Raum und Form (Fläche, Rand, Spiegeln, Würfelnetze, Würfelgebäude und Ansichten, Körper), Offen: Daten und Zufall, Probe-Modus.
 
 ## Der Begleiter, Bosse und Rennen (alle Fächer)
 - **Tier wählen**: Hund, Fuchs, Katze, Panda, Wolf, Tiger oder Drache (gleiche Pixelfigur, andere Farben). Münzen gibt es für je 10 Punkte, Snacks (Apfel bis Kuchen) lassen das Tier fröhlich mampfen.

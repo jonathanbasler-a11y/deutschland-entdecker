@@ -81,6 +81,16 @@ async function answer(p, right = true) {
     for (const i of want) await p.tap(`[data-act="k-gap"][data-v="${i}"]`);
     return p.tap("#kgo");
   }
+  if (t.type === "grid") {
+    if (right) for (const c of t.ans) await p.tap(`[data-act="k-cell"][data-v="${c.join(",")}"]`);
+    else {
+      const used = new Set([...t.given, ...t.ans].map((c) => c.join(",")));
+      let wrong = null;
+      for (let x = 0; x < t.cols && !wrong; x++) for (let y = 0; y < t.rows && !wrong; y++) if (!used.has(x + "," + y)) wrong = x + "," + y;
+      await p.tap(`[data-act="k-cell"][data-v="${wrong}"]`);
+    }
+    return p.tap("#kgo");
+  }
   if (t.type === "self") {
     await p.fill("#kst", "meine Antwort");
     await p.tap('[data-act="k-self-go"]');
@@ -113,7 +123,7 @@ async function openParents(p) {
   check((await p.textContent(".kcal li.cur")).includes("6."), "Heute (6.11.) ist markiert");
   check((await p.textContent(".chip.lzk")).includes("12 Tagen"), "Countdown: Kompass in 12 Tagen");
   check(!!(await p.$('[data-act="k-check"]')), "Heute: Startcheck");
-  check((await p.$$(".karea")).length === 8 && (await p.$$(".karea[disabled]")).length === 2, "8 Bereiche, 2 kommen noch (Raum, Daten)");
+  check((await p.$$(".karea")).length === 8 && (await p.$$(".karea[disabled]")).length === 1, "8 Bereiche, 1 kommt noch (Daten)");
   await shot(p, "home");
   await p.click('[data-act="k-check"]');
   check((await p.textContent("#cnt")) === "1 / 16", "Startcheck: 16 Aufgaben");
@@ -213,7 +223,8 @@ async function openParents(p) {
 {
   const { ctx, p } = await fresh("2026-11-12");
   const back = async () => { await p.click('[data-act="k-quit"]'); await p.click('[data-act="subject"][data-v="kompass"]').catch(() => {}); };
-  const cases = [["de.satzmatch", "match"], ["de.zeitmatch", "match"], ["de.satzcut", "cut"], ["de.recht.trenne", "write"], ["de.recht.gross", "pick"], ["de.recht.rede", "choice"]];
+  const cases = [["de.satzmatch", "match"], ["de.zeitmatch", "match"], ["de.satzcut", "cut"], ["de.recht.trenne", "write"], ["de.recht.gross", "pick"], ["de.recht.rede", "choice"],
+    ["ma.raum.spiegeln", "grid"], ["ma.raum.netzergaenzen", "grid"], ["ma.raum.netz", "multi"], ["ma.raum.ansicht", "choice"], ["ma.raum.gleichesgebaeude", "choice"], ["ma.raum.gebaeude", "num"], ["ma.raum.flaeche", "num"]];
   for (const [id, type] of cases) {
     await p.evaluate((id) => window.__DE_K.play([id]), id);
     check((await cur(p)).type === type, `${id}: Typ ${type}`);

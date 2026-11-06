@@ -6,6 +6,7 @@ const K = req("../public/kompass-logic.js");
 const D = req("../public/kompass-data.js");
 K.attachBank(D.BANK);
 const T = req("../public/kompass-text.js");
+req("../public/kompass-geo.js");
 K.attachBank(T.BANK2); K.extendBank(T.EXTRA);
 
 let n = 0;
@@ -115,6 +116,62 @@ for (const id of Object.keys(T.BANK2)) {
     }
     if (t.type === "cut") ok(t.ans.every((j) => j >= 0 && j < t.tokens.length - 1) && K.check(t, t.ans).ok && !K.check(t, []).ok, "Trennen: " + where);
     if (t.type === "self") ok(t.model && K.check(t, true).ok && !K.check(t, false).ok && K.solution(t) === t.model, "Selbstprüfen: " + where);
+  }
+}
+// Raum und Form: Figuren, Würfelnetze, Ansichten
+const G = req("../public/kompass-geo.js");
+{
+  // Würfelnetze: von 35 freien Sechser-Figuren sind genau 11 gültig
+  const canon = (c) => G.norm(c).map((x) => x.join(",")).sort().join(";");
+  let cur = [[[0, 0]]];
+  for (let n = 1; n < 6; n++) {
+    const nxt = new Map();
+    for (const c of cur) { const set = new Set(c.map((x) => x.join(","))); for (const [x, y] of c) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { if (set.has((x + dx) + "," + (y + dy))) continue; const nc = G.norm([...c, [x + dx, y + dy]]); nxt.set(canon(nc), nc); } }
+    cur = [...nxt.values()];
+  }
+  const free = []; for (const c of cur) if (!free.some((f) => G.sameShape(f, c))) free.push(c);
+  ok(cur.length === 216 && free.length === 35, `216 feste und 35 freie Sechser-Figuren (${cur.length}, ${free.length})`);
+  ok(free.filter(G.isCubeNet).length === 11, "genau 11 gültige Würfelnetze");
+  ok(G.isCubeNet([[1, 0], [0, 1], [1, 1], [2, 1], [1, 2], [1, 3]]) && !G.isCubeNet([[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2]]) && !G.isCubeNet([[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [0, 1]]), "Kreuz gültig, 2×3 und 5er-Reihe ungültig");
+  // Rand und Ansichten
+  ok(G.perimeter([[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]]) === 10 && G.perimeter([[0, 0], [1, 0], [0, 1]]) === 8, "Rand: 2×3 = 10, Winkel aus 3 = 8");
+  const tower = [[0, 0, 0], [0, 0, 0], [3, 0, 0]];
+  const v = G.views(tower);
+  ok(v.front.join() === "3,0,0" && v.right.join() === "3,0,0" && v.left.join() === "0,0,3" && v.back.join() === "0,0,3", "Ansichten eines Turms vorne links stimmen");
+  const asym = [[1, 3, 2], [0, 2, 3], [2, 1, 1]];
+  ok(G.sameBuilding(asym, G.rot(G.rot(asym))) && !G.sameBuilding(asym, G.mirror(asym)), "Gedrehtes Gebäude ist gleich, gespiegeltes nicht");
+  // Spiegelachsen jeder Figur unabhängig nachgerechnet (Spiegelung an Geraden durch den Mittelpunkt)
+  for (const sh of G.SHAPES) {
+    const pts = sh.p.split(" ").map((s) => s.split(",").map(Number)), cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    let n = 0;
+    for (let a = 0; a < 180; a += 0.5) {
+      const t = (a * Math.PI) / 180, c = Math.cos(2 * t), s = Math.sin(2 * t);
+      const refl = pts.map(([x, y]) => [cx + (x - cx) * c + (y - cy) * s, cy + (x - cx) * s - (y - cy) * c]);
+      if (refl.every(([x, y]) => pts.some(([px, py]) => Math.hypot(px - x, py - y) < 0.01))) n++;
+    }
+    ok(n === sh.ax, `${sh.n}: ${sh.ax} Spiegelachsen (nachgerechnet ${n})`);
+  }
+  for (const id of K.compsOfArea("ma.raum")) {
+    for (let seed = 1; seed <= 250; seed++) for (const lv of [1, 2]) {
+      const t = K.task(id, seed * 131 + lv, lv), where = `${id} ${seed}: ${t.q}`;
+      ok(t.q && t.tip && t.explain, "Text, Tipp, Erklärung: " + where);
+      if (t.type === "num") ok(Number.isInteger(t.ans) && t.ans >= 0 && K.check(t, String(t.ans)).ok && !K.check(t, String(t.ans + 1)).ok, "Zahl: " + where);
+      if (t.type === "choice") ok(new Set(t.opts).size === t.opts.length && K.check(t, t.ans).ok && (!t.figs || t.figs.length === t.opts.length), "Auswahl: " + where);
+      if (t.type === "multi") ok(t.ans.length >= 1 && t.ans.length < t.opts.length && K.check(t, t.ans).ok && (!t.figs || t.figs.length === t.opts.length), "Mehrfach: " + where);
+      if (t.type === "grid") {
+        const g = new Set(t.given.map((c) => c.join(",")));
+        ok(t.ans.every((c) => c[0] >= 0 && c[1] >= 0 && c[0] < t.cols && c[1] < t.rows && !g.has(c.join(","))), "Raster: Lösung liegt im Feld: " + where);
+        ok(K.check(t, t.ans.map((c) => c.join(","))).ok && !K.check(t, []).ok, "Raster: Lösung wird erkannt: " + where);
+      }
+      if (id === "ma.raum.flaeche") ok((t.fig.match(/stroke="#5b7fb8"/g) || []).length === t.ans, "Fläche = Kästchen im Bild: " + where);
+      if (id === "ma.raum.spiegeln") ok(t.given.length === t.ans.length && t.given.every(([x, y]) => t.ans.some(([a, b]) => a === t.cols - 1 - x && b === y)), "Spiegelbild stimmt: " + where);
+      if (id === "ma.raum.netzergaenzen") {
+        const full = [...t.given, ...t.ans];
+        ok(G.isCubeNet(full) && K.check(t, t.ans.map((c) => c.join(","))).ok, "Netz ergänzen: Lösung ist ein Würfelnetz: " + where);
+        const bad = t.ans.map((c) => [c[0], c[1]]); bad[1] = [bad[0][0] + 5, bad[0][1]];
+        ok(!K.check(t, [bad[0].join(","), "0,0"]).ok || G.isCubeNet([...t.given, bad[0], [0, 0]]), "Netz ergänzen: falsche Wahl wird erkannt: " + where);
+      }
+    }
   }
 }
 // Einzelfälle, die stimmen müssen

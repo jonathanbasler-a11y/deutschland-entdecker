@@ -66,7 +66,7 @@
     { id: "ma.zahlen", fach: "ma", name: "Zahlen und Rechnen", icon: "🔢", ready: true },
     { id: "ma.groessen", fach: "ma", name: "Größen und Messen", icon: "📏", ready: true },
     { id: "ma.muster", fach: "ma", name: "Muster und Strukturen", icon: "🔁", ready: true },
-    { id: "ma.raum", fach: "ma", name: "Raum und Form", icon: "🔷", ready: false },
+    { id: "ma.raum", fach: "ma", name: "Raum und Form", icon: "🔷", ready: true },
     { id: "ma.daten", fach: "ma", name: "Daten und Zufall", icon: "📊", ready: false },
   ];
   const COMPS = [];
@@ -268,6 +268,12 @@
     }
   }
 
+  // Generator von außen anmelden (Geometrie): gen(r, lv) liefert eine Aufgabe
+  function attachGen(id, area, name, gen) {
+    if (COMP[id]) return;
+    const c = { id, area, name, gen };
+    COMPS.push(c); COMP[id] = c;
+  }
   // Zusätzliche Aufgaben an bestehende Deutsch-Bänke anhängen (Schlüssel ohne "de.")
   function extendBank(extra) {
     for (const [k, items] of Object.entries(extra || {})) { const c = COMP["de." + k]; if (c && c.list && !c.extended) { c.list.push(...items); c.extended = true; } }
@@ -279,7 +285,7 @@
     if (!c) return null;
     const r = rng(seed);
     let t;
-    if (c.gen) t = c.gen(r, lv || 2);
+    if (c.gen) { for (let k = 0; k < 8 && !t; k++) t = c.gen(k ? rng(seed + k * 7919) : r, lv || 2); if (!t) throw new Error("Aufgabe nicht erzeugt: " + compId + " " + seed); }
     else { const i = seed % c.list.length; t = Object.assign({}, c.list[i]); t.idx = i; }
     if (c.passage) t.passage = c.passage;
     if (c.source) t.source = c.source;
@@ -291,6 +297,7 @@
       const order = shuffled(rng(seed + 7), t.opts.map((_, i) => i));
       const ans = t.type === "choice" ? [t.ans] : t.ans;
       t.opts = order.map((i) => t.opts[i]);
+      if (t.figs) t.figs = order.map((i) => t.figs[i]);
       const na = order.map((i, j) => (ans.includes(i) ? j : -1)).filter((j) => j >= 0);
       t.ans = t.type === "choice" ? na[0] : na;
     }
@@ -318,6 +325,13 @@
       const g = given || [];
       return { ok: t.left.every((_, i) => { const a = (g[i] || []).slice().sort((x, y) => x - y).join(), b = t.ans[i].slice().sort((x, y) => x - y).join(); return a === b; }) };
     }
+    // Raster antippen: Menge der Kästchen "x,y" (oder eigene Prüffunktion, z. B. Würfelnetz)
+    if (t.type === "grid") {
+      const g = [...new Set(given || [])];
+      if (t.verify) return { ok: !!t.verify(g) };
+      const a = t.ans.map((c) => c.join(","));
+      return { ok: g.length === a.length && a.every((x) => g.includes(x)) };
+    }
     // Trennstriche zwischen Wörtern: Menge der Lücken (Lücke i liegt hinter Wort i)
     if (t.type === "cut") { const g = [...new Set(given || [])].sort((x, y) => x - y).join(), a = t.ans.slice().sort((x, y) => x - y).join(); return { ok: g === a }; }
     // Kurzantwort: das Kind vergleicht selbst mit der Musterlösung (true/false)
@@ -339,6 +353,7 @@
     if (t.type === "pick") return t.ans.map((i) => t.tokens[i]).join(", ");
     if (t.type === "order") return t.items.join(" → ");
     if (t.type === "match") return t.left.map((l, i) => `${l} ${t.ans[i].length ? t.ans[i].map((j) => t.right[j]).join(" / ") : "(nichts)"}`).join(" · ");
+    if (t.type === "grid") return t.solText || "siehe Markierung";
     if (t.type === "cut") return t.tokens.map((w, i) => w + (t.ans.includes(i) ? " |" : "")).join(" ");
     if (t.type === "self") return t.model;
     if (t.type === "tf") return t.rows.map((x) => `${x.s}: ${x.ok ? "richtig" : "falsch"}`).join(" · ");
@@ -410,7 +425,7 @@
   const compsOf = (fach) => COMPS.filter((c) => { const a = AREAS.find((x) => x.id === c.area); return a && a.ready && !c.solo && (!fach || a.fach === fach); }).map((c) => c.id);
   const compsOfArea = (areaId) => COMPS.filter((c) => c.area === areaId).map((c) => c.id);
 
-  const api = { rng, int, pick, shuffled, fmt, fmtMoney, parseNum, words, STELLEN, AREAS, COMPS, COMP, attachBank, extendBank, task, unitTasks, check, solution, starsFor, weight, buildRound, PLAN, planFor, etappen, compsOf, compsOfArea };
+  const api = { rng, int, pick, shuffled, fmt, fmtMoney, parseNum, words, STELLEN, AREAS, COMPS, COMP, attachBank, attachGen, extendBank, task, unitTasks, check, solution, starsFor, weight, buildRound, PLAN, planFor, etappen, compsOf, compsOfArea };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DEKompass = api;
 })(typeof self !== "undefined" ? self : this);

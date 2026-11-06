@@ -668,3 +668,18 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .kselfbox .kmine { font-weight: 600; } .kselfbox .kmodel { font-weight: 700; color: #2f8f3a; }
 .kact { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 @media (max-width: 700px) { .kpass { max-height: 30vh; } .kmrow .kml { flex-basis: 100%; } }
+
+/* Kompass: Figuren, Tabellen, Raster */
+.kfig { display: flex; justify-content: center; margin: 4px 0 10px; }
+.kfig svg.geo { width: 100%; max-width: 360px; height: auto; border: 3px solid #0b1d2e; border-radius: 6px; }
+.kopts .opt.figopt { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; }
+.kopts .opt.figopt .kfo { display: block; width: 100%; max-width: 150px; }
+.kopts .opt.figopt .kfo svg { width: 100%; height: auto; display: block; border-radius: 4px; }
+.ktabwrap { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 10px; }
+.ktab { border-collapse: collapse; background: var(--panel2); }
+.ktab th, .ktab td { border: 2px solid #0b1d2e; padding: 6px 14px; text-align: center; min-width: 54px; }
+.ktab thead th { background: #1d4468; }
+.kgridwrap { display: flex; justify-content: center; }
+.kgrid { width: 100%; max-width: 560px; height: auto; border: 3px solid #0b1d2e; border-radius: 6px; touch-action: manipulation; }
+.kgrid .kcell { cursor: pointer; }
+@media (max-width: 700px) { .kfig svg.geo { max-width: 300px; } .kopts .opt.figopt .kfo { max-width: 120px; } }
