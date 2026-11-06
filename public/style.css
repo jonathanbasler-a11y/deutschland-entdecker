@@ -715,3 +715,23 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .konnertab td { font-size: 1.5rem; padding: 4px 8px; }
 .konnertab td.on { background: #1f5f2c; }
 .konnerview .ktabwrap { overflow-x: auto; align-items: stretch; }
+
+/* Probe-Kompass */
+.pchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 8px}
+.pchip{min-width:44px;min-height:44px;border-radius:12px;border:2px solid #cdd6e3;background:#fff;font:inherit;font-weight:700;color:#16304f}
+.pchip.done{background:#dff3e3;border-color:#2f8f3a}
+.pchip.cur{outline:3px solid #3b82f6}
+.pchip.big{min-width:84px;min-height:72px;font-size:1.3rem;display:inline-flex;flex-direction:column;align-items:center;justify-content:center}
+.pchip.open{background:#fff3d6;border-color:#d4a017}
+.pchip small{font-size:.75rem;font-weight:600}
+.pfin{margin-left:auto}
+.ptime{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ptime .pbar{flex:1;height:8px;border-radius:6px;background:#e5eaf2;overflow:hidden}
+.ptime .pbar i{display:block;height:100%;width:100%;background:#7aa7e6;transition:width 1s linear}
+.ptime span{font-size:.85rem;color:#4a5b73;white-space:nowrap}
+.pgrid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:14px 0}
+.prate{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.prate-b{flex:1;min-width:110px;min-height:84px;border-radius:16px;border:2px solid #cdd6e3;background:#fff;font:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.prate-b span{font-size:2rem}
+.pwrong{margin:6px 0;padding:8px 10px;border-radius:10px;background:#f6f8fb}
+.pwrong summary{font-weight:700;cursor:pointer}

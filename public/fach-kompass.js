@@ -8,7 +8,7 @@
   const TEST_DE = "2026-11-18", TEST_MA = "2026-11-19";
 
   /* ================= Speicher (S.kompass) ================= */
-  const kdefaults = () => ({ xp: 0, comp: {}, days: {}, done: {}, mission: { day: "", step: 0 }, missionsDone: 0, checks: [], total: 0, bestCombo: 0, set: { testDate: TEST_DE } });
+  const kdefaults = () => ({ xp: 0, comp: {}, days: {}, done: {}, mission: { day: "", step: 0 }, missionsDone: 0, checks: [], probes: [], total: 0, bestCombo: 0, set: { testDate: TEST_DE } });
   let merged = null;
   function KS() {
     const S = core.S;
@@ -82,7 +82,8 @@
     const done = !!k.done[dayKey()];
     const title = p ? p.title : "Freies Training", text = p ? p.text : "3 Etappen mit Bewegungspause, ca. 20 Minuten.";
     let btn;
-    if (kind === "check" && !done) btn = `<button class="mode big" data-act="k-check"><span class="ico">🧭</span><div><b>Los geht's: Startcheck</b><br><span>${esc(text)}</span></div></button>`;
+    if ((kind === "probe-de" || kind === "probe-ma") && !done) btn = `<button class="mode big" data-act="k-probe" data-v="${kind.slice(6)}"><span class="ico">📝</span><div><b>Los geht's: Probe ${kind === "probe-de" ? "Deutsch" : "Mathe"}</b><br><span>${esc(text)}</span></div></button>`;
+    else if (kind === "check" && !done) btn = `<button class="mode big" data-act="k-check"><span class="ico">🧭</span><div><b>Los geht's: Startcheck</b><br><span>${esc(text)}</span></div></button>`;
     else if (done) btn = `<div class="done-msg"><b>Für heute geschafft! 🏆</b><span>Super! Du kannst aufhören. Wenn du magst, übe unten einen Bereich.</span></div>`;
     else {
       const step = Math.min(mstep(), steps.length - 1), s = steps[step];
@@ -105,6 +106,8 @@
           <h2 style="margin-top:14px">Test-Tipps</h2><ul class="ktips"><li>Lies jede Frage zweimal.</li><li>Weißt du etwas nicht? Überspringen und später wiederkommen.</li><li>Am Ende alles noch einmal anschauen.</li></ul></section>
         <div class="right">
           ${todayCard()}
+          <button class="mode big" data-act="k-probe" data-v="de"><span class="ico">📝</span><div><b>Probe Deutsch</b><br><span>Wie der echte Test: 3 Teile, ohne Rückmeldung</span></div></button>
+          <button class="mode big" data-act="k-probe" data-v="ma"><span class="ico">📝</span><div><b>Probe Mathe</b><br><span>Wie der echte Test: 3 Teile, ohne Rückmeldung</span></div></button>
           <button class="mode big" data-act="k-konner"><span class="ico">🌱</span><div><b>Mein Könnerblatt</b><br><span>Was ich schon kann und was ich noch übe</span></div></button>
           <section class="card"><h2>Deutsch</h2><div class="kareas">${areaList("de")}</div></section>
           <section class="card"><h2>Mathe</h2><div class="kareas">${areaList("ma")}</div></section>
@@ -160,6 +163,134 @@
       ${block("de", "Deutsch")}${block("ma", "Mathe")}</div>`;
   }
 
+  /* ================= Probe-Kompass: wie der echte Test ================= */
+  // 3 Teile à 15 Minuten mit Bewegungspause. Überspringen erlaubt, am Ende kontrollieren. Währenddessen wird nichts bewertet.
+  const PMS = () => (TEST.kProbeMs != null ? TEST.kProbeMs : 15 * 60 * 1000);
+  const PSIZE = (n) => (TEST.kRoundLen ? Math.min(n, TEST.kRoundLen) : n);
+  let PENDING = "ma";
+  function probeGroups(fach) {
+    const plain = (a) => K.compsOfArea(a).filter((id) => !K.COMP[id].solo);
+    const round = (a, n) => K.buildRound(plain(a), PSIZE(n), statsMap(), seed(), 2);
+    if (fach === "ma") return [
+      { name: "Teil 1: Zahlen und Rechnen", tasks: round("ma.zahlen", 8) },
+      { name: "Teil 2: Muster, Raum und Form", tasks: [...round("ma.muster", 2), ...round("ma.raum", 6)] },
+      { name: "Teil 3: Größen, Daten und Zufall", tasks: [...round("ma.groessen", 5), ...round("ma.daten", 3)] },
+    ];
+    const ids = K.compsOfArea("de.lesen"), sc = (id) => { const st = KS().comp[id]; return st ? (st.stars || 0) * 100 + st.n : -1; };
+    const textId = TEST.kText || ids.slice().sort((x, y) => sc(x) - sc(y))[0];
+    return [
+      { name: "Teil 1: Lesen", tasks: K.unitTasks(textId) },
+      { name: "Teil 2: Rechtschreiben", tasks: round("de.recht", 8) },
+      { name: "Teil 3: Sprache untersuchen", tasks: round("de.sprache", 8) },
+    ];
+  }
+  function renderProbeIntro() {
+    const fach = PENDING, name = fach === "de" ? "Deutsch" : "Mathe", last = KS().probes.filter((p) => p.fach === fach).slice(-1)[0];
+    app.innerHTML = `<div class="results pintro"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Probe-Kompass ${name}</h1></div>
+      <section class="card"><h2>So läuft die Probe</h2><ul class="ktips"><li>Sie ist wie der echte Test: <b>3 Teile</b>, jeder etwa <b>15 Minuten</b>, dazwischen eine Bewegungspause.</li>
+        <li>Du darfst <b>überspringen</b> und später zurückkommen.</li><li>Während der Probe sagt dir die App <b>nicht</b>, ob etwas richtig ist. Das siehst du am Ende.</li><li>Am Ende jedes Teils kontrollierst du deine Antworten.</li></ul>
+        ${last ? `<p class="muted">Letzte Probe ${name}: ${last.ok} von ${last.n} richtig.</p>` : ""}
+        <h2>Wie sicher fühlst du dich gerade?</h2><p class="muted">Tippe an, wie weit deine Pflanze schon ist.</p>
+        <div class="prate">${PLANT.map((p, i) => `<button class="prate-b" data-act="k-pstart" data-v="${i}"><span>${p}</span><small>${PLANT_NAME[i]}</small></button>`).join("")}</div>
+        <p class="muted">Mit dem Antippen geht es los.</p></section></div>`;
+  }
+  function startProbe(fach, rating) {
+    const groups = probeGroups(fach), tasks = [], blocks = [];
+    for (const g of groups) { blocks.push({ name: g.name, from: tasks.length, to: tasks.length + g.tasks.length }); tasks.push(...g.tasks); }
+    newRound("probe", tasks, { fach, blocks, blk: 0, given: {}, rating, review: false, expired: false, tEnd: Date.now() + PMS(), i: 0, label: `${fach === "de" ? "Probe Deutsch" : "Probe Mathe"} · ${blocks[0].name}` });
+  }
+  function probeChrome() {
+    const r = KR, b = r.blocks[r.blk];
+    const lab = $(".mlabel"); if (lab) lab.textContent = `${r.fach === "de" ? "Probe Deutsch" : "Probe Mathe"} · ${b.name}`;
+    const pc = $("#pchips"), pt = $("#ptime");
+    if (pc) { pc.hidden = false; pc.innerHTML = Array.from({ length: b.to - b.from }, (_, j) => { const i = b.from + j; return `<button class="pchip${i === r.i ? " cur" : ""}${r.given[i] !== undefined ? " done" : ""}" data-act="k-pgo" data-v="${i}" aria-label="Aufgabe ${j + 1}${r.given[i] !== undefined ? ", beantwortet" : ""}">${j + 1}</button>`; }).join("") + `<button class="btn ghost pfin" data-act="k-pdone">Alles ansehen und abgeben →</button>`; }
+    if (pt) pt.hidden = false;
+    document.querySelectorAll("#kgo").forEach((x) => { x.textContent = "Antwort speichern"; });
+    const ws = $("#kws"); if (ws) ws.textContent = "Speichern";
+    const act = $("#kact"); if (act && !act.querySelector('[data-act="k-pskip"]')) act.insertAdjacentHTML("beforeend", `<button class="btn ghost" data-act="k-pskip">Überspringen</button>`);
+    if (r.given[r.i] !== undefined) fb("hint", "Hier hast du schon geantwortet. Du kannst die Antwort ändern.");
+    probeTick();
+  }
+  function probeTick() {
+    const r = KR;
+    clearInterval(r.timer);
+    const upd = () => {
+      if (KR !== r || r.done || r.review || (core.view !== "k-game")) { if (KR !== r || r.done || core.view !== "k-game") clearInterval(r.timer); return; }
+      const left = Math.max(0, r.tEnd - Date.now()), el = $("#ptime");
+      if (el) { el.querySelector("i").style.width = (left / PMS()) * 100 + "%"; el.querySelector("span").textContent = left > 0 ? `noch ca. ${Math.ceil(left / 60000)} Min.` : "Zeit um"; }
+      if (left <= 0) probeTimeUp();
+    };
+    r.timer = setInterval(upd, 1000); upd();
+  }
+  function probeTimeUp() {
+    const r = KR;
+    if (!r || r.mode !== "probe" || r.done || r.expired) return;
+    r.expired = true;
+    core.toast("⏰ Die Zeit für diesen Teil ist um. Schau noch kurz, ob alles ausgefüllt ist.");
+    goReview();
+  }
+  function goReview() { const r = KR; clearInterval(r.timer); r.review = true; go("k-preview"); }
+  // nächste noch nicht beantwortete Aufgabe im Teil, sonst zur Kontrolle
+  function probeNext(skip) {
+    const r = KR;
+    if (!r || r.mode !== "probe" || r.review || r.done) return;
+    const b = r.blocks[r.blk], n = b.to - b.from;
+    for (let k = 1; k < n + (skip ? 0 : 1); k++) { const i = b.from + ((r.i - b.from + k) % n); if (r.given[i] === undefined) { r.i = i; return showTask(); } }
+    goReview();
+  }
+  function probeReview() {
+    const r = KR, b = r.blocks[r.blk], last = r.blk === r.blocks.length - 1, n = b.to - b.from;
+    let open = 0;
+    const cells = Array.from({ length: n }, (_, j) => { const i = b.from + j, has = r.given[i] !== undefined; if (!has) open++; return `<button class="pchip big ${has ? "done" : "open"}" ${r.expired ? "disabled" : `data-act="k-pgo" data-v="${i}"`} aria-label="Aufgabe ${j + 1}, ${has ? "beantwortet" : "noch leer"}">${j + 1}<small>${has ? "✓" : "leer"}</small></button>`; }).join("");
+    app.innerHTML = `<div class="results preview"><div class="card hero"><h1>${esc(b.name)}: kontrolliere deine Antworten</h1>
+      <p class="muted">${r.expired ? "Die Zeit ist um. " : ""}${open ? `${open} ${open === 1 ? "Aufgabe ist" : "Aufgaben sind"} noch leer. ${r.expired ? "" : "Tippe auf die Nummer, um noch einmal hinzugehen."}` : "Alles ausgefüllt. Super!"}</p>
+      <div class="pgrid" id="pgrid">${cells}</div>
+      <div class="row"><button class="btn" data-act="k-pblock" id="pblock">${last ? "Probe abgeben" : "Teil abgeben und Pause machen"}</button></div></div></div>`;
+  }
+  function blockDone() {
+    const r = KR;
+    clearInterval(r.timer);
+    if (r.blk >= r.blocks.length - 1) return finishProbe();
+    r.blk++; r.review = false; r.expired = false; r.i = r.blocks[r.blk].from;
+    core.startPause(() => { if (KR !== r || r.done) return go("home"); r.tEnd = Date.now() + PMS(); go("k-game"); });
+  }
+  function finishProbe() {
+    const r = KR;
+    if (!r || r.done) return;
+    clearInterval(r.timer);
+    const k = KS(), byArea = {}, wrongList = [];
+    r.results = []; r.selfOpen = [];
+    r.q.forEach((it, i) => {
+      const t = it.t, g = r.given[i], area = K.COMP[t.comp] ? K.COMP[t.comp].area : "?";
+      byArea[area] = byArea[area] || { ok: 0, n: 0 };
+      if (g === undefined) { r.results.push({ t, ok: false, blank: true }); byArea[area].n++; wrongList.push({ t, blank: true }); return; }
+      if (g && typeof g === "object" && g.self !== undefined) { r.selfOpen.push({ t, text: g.self }); return; }
+      const ok = K.check(t, g).ok;
+      record(t, ok); r.results.push({ t, ok }); byArea[area].n++; if (ok) byArea[area].ok++; else wrongList.push({ t, blank: false });
+    });
+    r.byArea = byArea; r.wrongList = wrongList;
+    const ok = r.results.filter((x) => x.ok).length, n = r.results.length;
+    r.ok = ok; r.n = n; r.pct = n ? Math.round((ok / n) * 100) : 0; r.xp = ok * 5 + 30; k.xp += r.xp;
+    k.probes.push({ date: dayKey(), fach: r.fach, n, ok, rating: r.rating, areas: byArea });
+    const p = todayPlan(); if (p && p.kind === "probe-" + r.fach) k.done[dayKey()] = true;
+    r.done = true; r.tok = -1;
+    core.addTime(r);
+    r.loot = core.giveBlocks(3);
+    save(); core.checkBadges();
+    go("k-results");
+    if (r.pct >= 70) { confetti(120); tone("win"); }
+  }
+  function probeResults(r) {
+    const stage = r.pct >= 90 ? 3 : r.pct >= 75 ? 2 : r.pct >= 50 ? 1 : 0, rt = r.rating;
+    const msg = rt > stage ? `Du hast dich auf ${PLANT[rt]} eingeschätzt, das Ergebnis liegt bei ${PLANT[stage]}. Das ist ganz normal. Schau dir unten an, was noch nicht klappt, dann wächst beides zusammen.`
+      : rt < stage ? `Du hast dich auf ${PLANT[rt]} eingeschätzt, und es ist ${PLANT[stage]}! Du kannst mehr, als du denkst. 🎉` : `Deine Einschätzung ${PLANT[rt]} passt zum Ergebnis. Gut erkannt!`;
+    const prof = K.AREAS.filter((a) => r.byArea[a.id]).map((a) => { const x = r.byArea[a.id]; return `<tr><td>${a.icon} ${esc(a.name)}</td><td>${x.ok} / ${x.n}</td><td>${PLANT[x.n ? (x.ok / x.n >= 0.9 ? 3 : x.ok / x.n >= 0.75 ? 2 : x.ok / x.n >= 0.5 ? 1 : 0) : 0]}</td></tr>`; }).join("");
+    const wrongs = r.wrongList.slice(0, 12).map((x) => `<details class="pwrong"><summary>${x.blank ? "○ leer" : "✗"} ${esc(x.t.q)}</summary><p><b>Lösung:</b> ${esc(K.solution(x.t))}</p><p class="muted">${esc(x.t.explain)}</p></details>`).join("");
+    const selfs = r.selfOpen.map((x) => `<details class="pwrong"><summary>✎ ${esc(x.t.q)}</summary><p><b>Deine Antwort:</b> ${esc(x.text) || "(leer)"}</p><p><b>So kann es aussehen:</b> ${esc(x.t.model)}</p></details>`).join("");
+    return `<div class="card"><h2>So ist es dir gegangen</h2><p>${msg}</p><table class="tbl"><thead><tr><th>Bereich</th><th>richtig</th><th>Pflanze</th></tr></thead><tbody>${prof}</tbody></table><p class="muted">Das ist eine Übungsprobe, keine Note. Sie zeigt dir, was du als Nächstes übst.</p></div>
+      ${wrongs ? `<div class="card"><h2>Das schauen wir uns an</h2>${wrongs}</div>` : ""}${selfs ? `<div class="card"><h2>Zum Nachlesen: deine eigenen Sätze</h2>${selfs}</div>` : ""}`;
+  }
+
   /* ================= Spielbildschirm ================= */
   function drawGame() {
     const r = KR;
@@ -170,6 +301,7 @@
         <span class="count" id="cnt"></span><span class="combo" id="combo"></span><span class="xp" id="xpv"></span></div>
       <div class="kstage"><div class="mcard kcard" id="kcard">
         <small class="mlabel">${esc(r.label || "")}</small>
+        <div class="pchips" id="pchips" hidden></div><div class="ptime" id="ptime" hidden><div class="pbar"><i></i></div><span></span></div>
         <div class="kpass" id="kpass" hidden></div>
         <div class="kq" id="kq"></div>
         <div class="kans" id="kans"></div>
@@ -184,6 +316,12 @@
   const fb = (cls, html) => { const f = $("#fb"); if (f) f.innerHTML = html ? `<div class="feedback ${cls}">${html}</div>` : ""; };
   function updateBar() {
     const r = KR;
+    if (r.mode === "probe") {
+      const b = r.blocks[r.blk], n = b.to - b.from, done = Object.keys(r.given).filter((i) => +i >= b.from && +i < b.to).length;
+      const pg = $("#pg"); if (pg) pg.style.width = (done / n) * 100 + "%";
+      const c = $("#cnt"); if (c) c.textContent = `${Math.max(1, r.i - b.from + 1)} / ${n}`;
+      return;
+    }
     const pg = $("#pg"); if (pg) pg.style.width = (r.i / r.q.length) * 100 + "%";
     const c = $("#cnt"); if (c) c.textContent = Math.min(r.i + 1, r.q.length) + " / " + r.q.length;
     if (r.boss) core.bossUI.draw(r);
@@ -194,6 +332,7 @@
     <button class="key del" data-act="k-key" data-v="del" aria-label="Löschen">⌫</button><button class="key" data-act="k-key" data-v="0">0</button>${dec ? `<button class="key" data-act="k-key" data-v=",">,</button>` : ""}<button class="key ok" data-act="k-key" data-v="ok" id="kok" aria-label="Fertig">✓</button></div>`;
   function showTask() {
     const r = KR;
+    if (r.mode === "probe" && r.review) return probeReview();
     if (r.i >= r.q.length) {
       if (r.mode === "mission" && !r.easy && core.bossOn() && !r.boss) return startBoss();
       return finish();
@@ -215,6 +354,7 @@
     else fb();
     drawAnswer();
     updateBar();
+    if (r.mode === "probe") probeChrome();
     if (core.S.autoRead) core.say(t.say ? t.q.replace(/:.*/, ": " + t.say) : t.q);
   }
   function drawAnswer() {
@@ -347,6 +487,8 @@
   function submit(given) {
     const r = KR, t = r.cur;
     if (r.lock) return;
+    // Probe: nur speichern, nichts zeigen (wie im echten Test)
+    if (r.mode === "probe") { r.given[r.i] = given; r.lock = true; fb("hint", "Gespeichert ✓"); updateBar(); later(() => probeNext(false), 350); return; }
     const res = K.check(t, given);
     if (res.ok) right(); else wrong(res);
   }
@@ -470,6 +612,10 @@
   function renderResults() {
     const r = KR;
     if (!r) return go("home");
+    if (r.mode === "probe") {
+      app.innerHTML = `<div class="results kresults"><div class="card hero"><h1>Probe geschafft! 🏆</h1><div class="score">${r.ok} / ${r.n}</div><p class="muted">+${r.xp} Punkte. Du hast alle 3 Teile durchgehalten.</p>${r.loot ? `<div class="gains"><div>${r.loot.text}</div></div>` : ""}</div>${probeResults(r)}<div class="row"><button class="btn" data-act="home">Fertig</button></div></div>`;
+      return;
+    }
     const uniqComps = (list) => [...new Set(list.map((x) => x.t.comp))];
     const goodC = uniqComps(r.results.filter((x) => x.ok)), badC = uniqComps(r.results.filter((x) => !x.ok));
     let head, big = `${r.ok} / ${r.n}`, sub = `+${r.xp} Punkte`, extra = "", buttons;
@@ -502,6 +648,7 @@
   const allStars = (fach, n) => { const ids = K.compsOf(fach); return ids.length && ids.every((id) => starsOf(id) >= n); };
   const badges = [
     { id: "k_check", icon: "🧭", name: "Kompass-Start", desc: "Den Startcheck gemacht", ok: () => KS().checks.length >= 1 },
+    { id: "k_probe", icon: "📝", name: "Probe-Profi", desc: "Eine ganze Probe durchgehalten", ok: () => KS().probes.length >= 1 },
     { id: "k_day1", icon: "📅", name: "Planer", desc: "Den ersten Plan-Tag geschafft", ok: () => Object.keys(KS().done).length >= 1 },
     { id: "k_day5", icon: "🗓️", name: "Dranbleiber", desc: "5 Plan-Tage geschafft", ok: () => Object.keys(KS().done).length >= 5 },
     { id: "k_combo", icon: "🔥", name: "Kompass-Serie", desc: "8 richtig hintereinander", ok: () => KS().bestCombo >= 8 },
@@ -527,6 +674,7 @@
       <section class="card"><h2>Kompass 4: Stand</h2><p class="muted" style="margin-bottom:8px">Plan: ${doneDays} von ${K.PLAN.length} Tagen geschafft · ${k.total} Aufgaben · ${k.missionsDone} Trainingstage.</p>
         <table class="tbl"><thead><tr><th>Aufgabenart</th><th>Sterne</th><th>Richtig (letzte 10)</th><th>Aufgaben</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="muted" style="margin-top:8px">★ 3 von 4 richtig · ★★ 75 % der letzten 8 · ★★★ 90 % der letzten 10. Sterne bleiben.</p></section>
+      <section class="card"><h2>Proben</h2>${k.probes.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Fach</th><th>Richtig</th><th>Selbsteinschätzung</th></tr></thead><tbody>${k.probes.map((x) => `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}</td><td>${x.ok} / ${x.n}</td><td>${PLANT[x.rating] || ""} ${PLANT_NAME[x.rating] || ""}</td></tr>`).join("")}</tbody></table><p class="muted" style="margin-top:8px">Übungsproben, keine Note. Freie Antworten werden nicht gewertet.</p>` : `<p class="muted">Noch keine Probe gemacht.</p>`}</section>
       <section class="card"><h2>Einstellungen Kompass</h2><div class="setgrid">
         <label for="k-td">Datum Kompass Deutsch</label><input type="date" id="k-td" value="${esc(k.set.testDate || TEST_DE)}">
         <label for="k-boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label><input type="checkbox" id="k-boss" ${core.bossOn() ? "checked" : ""}>
@@ -566,7 +714,13 @@
       } break;
       case "k-mat": if (r && !r.lock) { const [i, j] = v.split(":").map(Number); r.sel[i] = (r.sel[i] || []).includes(j) ? [] : [j]; drawAnswer(); } break;
       case "k-gap": if (r && !r.lock) { const i = +v; r.sel = r.sel.includes(i) ? r.sel.filter((x) => x !== i) : r.sel.concat(i); drawAnswer(); } break;
-      case "k-self-go": if (r && !r.lock) { const ta = $("#kst"); r.selfText = ta ? ta.value.trim() : ""; r.selfStage = 1; drawAnswer(); } break;
+      case "k-self-go": if (r && !r.lock) { const ta = $("#kst"); r.selfText = ta ? ta.value.trim() : ""; if (r.mode === "probe") { submit({ self: r.selfText }); break; } r.selfStage = 1; drawAnswer(); } break;
+      case "k-probe": PENDING = v === "de" ? "de" : "ma"; go("k-pintro"); break;
+      case "k-pstart": startProbe(PENDING, +v); break;
+      case "k-pgo": if (r && r.mode === "probe" && !r.expired) { const i = +v, b = r.blocks[r.blk]; if (i >= b.from && i < b.to) { r.review = false; r.i = i; go("k-game"); } } break;
+      case "k-pskip": if (r && r.mode === "probe" && !r.lock) probeNext(true); break;
+      case "k-pdone": if (r && r.mode === "probe") goReview(); break;
+      case "k-pblock": if (r && r.mode === "probe") blockDone(); break;
       case "k-self": if (r && !r.lock && r.selfStage) submit(v === "1"); break;
       case "k-next": if (r && r.wait) next(); break;
       case "k-quit": if (r) { r.tok = -1; r.done = true; core.addTime(r); } go("home"); break;
@@ -593,13 +747,13 @@
     key(v);
   });
 
-  window.__DE_K = { get R() { return KR; }, KS, K, play: (ids) => newRound("practice", ids.flatMap((id, i) => (K.COMP[id] && K.COMP[id].solo ? K.unitTasks(id) : [K.task(id, i, 2)])), { area: "de.sprache", label: "Test" }) };
+  window.__DE_K = { get R() { return KR; }, KS, K, probeTimeUp: () => probeTimeUp(), play: (ids) => newRound("practice", ids.flatMap((id, i) => (K.COMP[id] && K.COMP[id].solo ? K.unitTasks(id) : [K.task(id, i, 2)])), { area: "de.sprache", label: "Test" }) };
 
   return {
     id: "kompass", prefix: "k-", name: "Kompass 4", icon: "🧭",
     home, act, badges,
     xp: () => (core.S.kompass && core.S.kompass.xp) || 0,
-    render(view) { if (view === "k-game") return drawGame(); if (view === "k-results") return renderResults(); if (view === "k-konner") return renderKonner(); go("home"); },
+    render(view) { if (view === "k-game") return drawGame(); if (view === "k-results") return renderResults(); if (view === "k-konner") return renderKonner(); if (view === "k-pintro") return renderProbeIntro(); if (view === "k-preview") return probeReview(); go("home"); },
     activeOn: (k) => !!(core.S.kompass && core.S.kompass.days && core.S.kompass.days[k]),
     parents, bindParents,
   };
