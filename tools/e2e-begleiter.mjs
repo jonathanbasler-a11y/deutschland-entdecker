@@ -192,14 +192,14 @@ async function deStep(p, right = true) {
   await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
   await p.click('.snack[data-v="acc:krone"]');
   let pp = (await S(p)).pet;
-  check(pp.spent === 25 && pp.acc.includes("krone") && pp.worn.includes("krone") && (await p.$(".bigdog .acc-head")), "Krone gekauft und aufgesetzt");
+  check(pp.spent === 25 && pp.acc.includes("krone") && pp.worn.includes("krone") && (await p.textContent(".bigdog .dog")).includes("👑"), "Krone gekauft und am Tier gezeichnet");
   await p.click('.snack[data-v="acc:hut"]');
   pp = (await S(p)).pet;
   check(pp.worn.length === 1 && pp.worn[0] === "hut", "Zylinder ersetzt die Krone (ein Kopf-Teil)");
   await p.click('.snack[data-v="krone"]');
   check((await S(p)).pet.worn[0] === "krone" && (await S(p)).pet.spent === 37, "Besessenes Teil wieder anziehen kostet nichts");
   await p.click('.snack[data-v="krone"]');
-  check((await S(p)).pet.worn.length === 0 && (await p.$$(".bigdog .acc")).length === 0, "Ausziehen");
+  check((await S(p)).pet.worn.length === 0 && !(await p.textContent(".bigdog .dog")).includes("👑"), "Ausziehen");
   await p.click('.snack[data-v="room:weltall"]');
   pp = (await S(p)).pet;
   check(pp.room === "weltall" && pp.spent === 67 && /1b1f4a/.test(await p.getAttribute(".room", "style")), "Zimmer Weltall gekauft und bezogen");
