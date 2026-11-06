@@ -23,6 +23,8 @@ jobs:
         run: node tools/test-logic.mjs
       - name: Rechen-Logik
         run: node tools/test-rechnen.mjs
+      - name: Kompass-Logik
+        run: node tools/test-kompass.mjs
       - name: Browser installieren
         run: |
           npm install --no-save playwright@1.63.0
@@ -35,8 +37,10 @@ jobs:
         run: node tools/e2e-features.mjs
       - name: Kopfrechnen
         run: node tools/e2e-rechnen.mjs
-      - name: Begleiter, Boss, Rennen
+      - name: Begleiter, Boss, Rennen, Tierauswahl, Snacks
         run: node tools/e2e-begleiter.mjs
+      - name: Kompass 4
+        run: node tools/e2e-kompass.mjs
       - name: Mehrere Antworten, stumme Karte als Blatt
         run: node tools/e2e-blatt.mjs
       - name: Alte und kaputte Spielstände

@@ -172,6 +172,21 @@ async function deStep(p, right = true) {
   check((await p.textContent(".bstat")).includes("0 von 44"), "Bauprojekt Hundehütte: abgebrochene Runde gibt keine Blöcke");
   check((await p.$$(".trophy.got")).length === 0, "Noch keine Boss-Pokale");
   await shot(p, "pet");
+  // Tier wählen und Snacks (Münzen = Punkte / 10 minus Ausgaben)
+  check((await p.$$(".kind")).length === 7 && (await p.textContent(".kind.on b")) === "Hund", "Tierauswahl: 7 Tiere, Hund gewählt");
+  await p.click('.kind[data-v="fuchs"]');
+  check((await S(p)).pet.kind === "fuchs" && (await p.textContent(".petview h1")) === "Mein Fuchs" && (await p.textContent(".petmeta .stage")) === "Großer Fuchs", "Fuchs gewählt: Titel und Stufenname");
+  check(await p.$(".bigdog .dog.k-fuchs"), "Fuchs wird gezeichnet");
+  const c0 = await p.textContent("#coins");
+  check(c0.includes("95"), "Münzen: 950 Punkte = 95 " + c0);
+  await p.click('.snack[data-v="keks"]');
+  check((await S(p)).pet.spent === 5 && (await S(p)).pet.fed.keks === 1 && (await p.textContent("#coins")).includes("90"), "Keks gekauft: 5 Münzen weniger");
+  check((await p.getAttribute(".sat", "aria-label")).includes("20"), "Satt-Balken steigt");
+  await ev(p, "(window.__DE.S.pet.spent = 90, true)");
+  await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
+  check((await p.isDisabled('.snack[data-v="kuchen"]')) && !(await p.isDisabled('.snack[data-v="apfel"]')), "Zu teuer: Snack gesperrt, Apfel geht");
+  await p.click('.kind[data-v="hund"]');
+  check((await p.textContent(".petmeta .stage")) === "Großer Hund", "zurück zum Hund");
   check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
   await ctx.close();
 }

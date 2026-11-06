@@ -60,7 +60,7 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
 // 1) Fach wechseln, Turm, erste Runde, Stufe freischalten
 {
   const { ctx, p } = await fresh();
-  check((await p.$$(".subj")).length === 2, "Zwei Fach-Reiter auf der Startseite");
+  check((await p.$$(".subj")).length === 3, "Drei Fach-Reiter auf der Startseite");
   await p.click('[data-act="subject"][data-v="math"]');
   check(await p.$(".mhome"), "Kopfrechnen-Startseite");
   await p.reload();
@@ -173,7 +173,7 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   check(await p.$(".mhome .done-msg"), "Startseite: für heute geschafft");
   await p.click('[data-act="badges"]');
   check((await p.textContent(".bgroup")).includes("Kopfrechnen"), "Abzeichen-Seite zeigt zuerst Kopfrechnen");
-  check((await p.$$(".bgroup")).length === 2, "Abzeichen nach Fach gegliedert");
+  check((await p.$$(".bgroup")).length === 3, "Abzeichen nach Fach gegliedert");
   check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
   await ctx.close();
 }
@@ -269,7 +269,7 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   await openParents(p);
   check(await p.$('.ptabs [data-v="math"][aria-pressed="true"]'), "Eltern-Übersicht öffnet beim gewählten Fach");
   check((await p.$$(".x1 td")).length === 81, "1×1-Tabelle mit 81 Feldern");
-  check((await p.$$(".x1 td.bad")).length >= 1 && (await p.$$(".x1 td.good")).length >= 1, "Tabelle zeigt Fehler und Sicheres");
+  check((await p.$$(".x1 td.bad")).length >= 1 && (await p.$$(".x1 td.good, .x1 td.slow")).length >= 1, "Tabelle zeigt Fehler und richtig Beantwortetes");
   check((await p.textContent(".parents")).includes("Wackelt noch"), "Liste 'Wackelt noch'");
   await shot(p, "parents");
   await p.selectOption("#m-tn", "30");

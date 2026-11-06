@@ -6,7 +6,11 @@ Lern-App fürs iPad, 4. Klasse, Baden-Württemberg. Oben wählt man das Fach:
 
 Name, Serie, Töne, ruhiger Modus, Vorlesen, Bewegungspause, Eltern-Übersicht und der Hund gelten für beide Fächer. Punkte, Ränge und Abzeichen hat jedes Fach für sich.
 
-## Der Begleiter-Hund, Bosse und Rennen (beide Fächer)
+## 🧭 Kompass 4 (Deutsch und Mathe), Test am 18. und 19.11.2026
+Drittes Fach für die Lernstandserhebung Kompass 4 (je 45 Minuten, Papier). Ein Startcheck, ein 14-Tage-Plan (6.–19.11.) mit kurzen Etappen, Tipps und Boss, Übungen je Bereich mit Sternen. Aufgaben werden mit Startwert erzeugt und gegen eine unabhängige Nachrechnung getestet (`tools/test-kompass.mjs`, `tools/e2e-kompass.mjs`). Bisher fertig: Sprache untersuchen (Deutsch), Zahlen, Größen, Muster (Mathe). Offen: Lesen, Rechtschreiben, Raum und Form, Daten und Zufall, Originale des IBBW.
+
+## Der Begleiter, Bosse und Rennen (alle Fächer)
+- **Tier wählen**: Hund, Fuchs, Katze, Panda, Wolf, Tiger oder Drache (gleiche Pixelfigur, andere Farben). Münzen gibt es für je 10 Punkte, Snacks (Apfel bis Kuchen) lassen das Tier fröhlich mampfen.
 Eigener Pixel-Stil mit eigenen Figuren, alles in `public/begleiter.js` gezeichnet.
 - **Pixel-Hund**: Beim ersten Start bekommt er einen Namen. Er wächst mit den Punkten aus allen Fächern zusammen: Welpe (0), Junghund (300), Großer Hund (900), Held-Hund (2000). Dazu kommen Halstuch, Helm, Fackel und Umhang.
   - Er wedelt, wenn heute geübt wurde, begrüßt einmal am Tag und lässt sich streicheln.
