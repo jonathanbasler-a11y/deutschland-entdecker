@@ -108,6 +108,8 @@
           ${todayCard()}
           <button class="mode big" data-act="k-probe" data-v="de"><span class="ico">📝</span><div><b>Probe Deutsch</b><br><span>Wie der echte Test: 3 Teile, ohne Rückmeldung</span></div></button>
           <button class="mode big" data-act="k-probe" data-v="ma"><span class="ico">📝</span><div><b>Probe Mathe</b><br><span>Wie der echte Test: 3 Teile, ohne Rückmeldung</span></div></button>
+          <button class="mode big" data-act="k-probe" data-v="de-orig"><span class="ico">📄</span><div><b>Echter Test Deutsch 2025</b><br><span>Aufgaben aus dem Original (IBBW)</span></div></button>
+          <button class="mode big" data-act="k-probe" data-v="ma-orig"><span class="ico">📄</span><div><b>Echter Test Mathe 2025</b><br><span>Aufgaben aus dem Original (IBBW)</span></div></button>
           <button class="mode big" data-act="k-konner"><span class="ico">🌱</span><div><b>Mein Könnerblatt</b><br><span>Was ich schon kann und was ich noch übe</span></div></button>
           <section class="card"><h2>Deutsch</h2><div class="kareas">${areaList("de")}</div></section>
           <section class="card"><h2>Mathe</h2><div class="kareas">${areaList("ma")}</div></section>
@@ -167,8 +169,14 @@
   // 3 Teile à 15 Minuten mit Bewegungspause. Überspringen erlaubt, am Ende kontrollieren. Währenddessen wird nichts bewertet.
   const PMS = () => (TEST.kProbeMs != null ? TEST.kProbeMs : 15 * 60 * 1000);
   const PSIZE = (n) => (TEST.kRoundLen ? Math.min(n, TEST.kRoundLen) : n);
-  let PENDING = "ma";
-  function probeGroups(fach) {
+  let PENDING = "ma", PORIG = false;
+  function probeGroups(fach, orig) {
+    if (orig) {
+      const gs = K.original(fach).map((g) => (g.unit ? Object.assign({}, g, { tasks: K.unitTasks(g.unit) }) : g));
+      const plain2 = (a) => K.compsOfArea(a).filter((id) => !K.COMP[id].solo);
+      if (fach === "ma") gs.push({ name: "Teil 3: Raum und Daten (ähnlich gebaut)", tasks: [...K.buildRound(plain2("ma.raum"), PSIZE(4), statsMap(), seed(), 2), ...K.buildRound(plain2("ma.daten"), PSIZE(3), statsMap(), seed(), 2)] });
+      return gs;
+    }
     const plain = (a) => K.compsOfArea(a).filter((id) => !K.COMP[id].solo);
     const round = (a, n) => K.buildRound(plain(a), PSIZE(n), statsMap(), seed(), 2);
     if (fach === "ma") return [
@@ -185,9 +193,9 @@
     ];
   }
   function renderProbeIntro() {
-    const fach = PENDING, name = fach === "de" ? "Deutsch" : "Mathe", last = KS().probes.filter((p) => p.fach === fach).slice(-1)[0];
+    const fach = PENDING, name = (fach === "de" ? "Deutsch" : "Mathe") + (PORIG ? " (Original 2025)" : ""), last = KS().probes.filter((p) => p.fach === fach).slice(-1)[0];
     app.innerHTML = `<div class="results pintro"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Probe-Kompass ${name}</h1></div>
-      <section class="card"><h2>So läuft die Probe</h2><ul class="ktips"><li>Sie ist wie der echte Test: <b>3 Teile</b>, jeder etwa <b>15 Minuten</b>, dazwischen eine Bewegungspause.</li>
+      <section class="card"><h2>So läuft die Probe</h2>${PORIG ? `<p class="muted">Aufgaben aus dem echten Test 2025 (© IBBW), für die App umgebaut. Aufgaben mit Zeichnungen fehlen, dafür gibt es ähnliche.</p>` : ""}<ul class="ktips"><li>Sie ist wie der echte Test: <b>3 Teile</b>, jeder etwa <b>15 Minuten</b>, dazwischen eine Bewegungspause.</li>
         <li>Du darfst <b>überspringen</b> und später zurückkommen.</li><li>Während der Probe sagt dir die App <b>nicht</b>, ob etwas richtig ist. Das siehst du am Ende.</li><li>Am Ende jedes Teils kontrollierst du deine Antworten.</li></ul>
         ${last ? `<p class="muted">Letzte Probe ${name}: ${last.ok} von ${last.n} richtig.</p>` : ""}
         <h2>Wie sicher fühlst du dich gerade?</h2><p class="muted">Tippe an, wie weit deine Pflanze schon ist.</p>
@@ -195,13 +203,13 @@
         <p class="muted">Mit dem Antippen geht es los.</p></section></div>`;
   }
   function startProbe(fach, rating) {
-    const groups = probeGroups(fach), tasks = [], blocks = [];
+    const groups = probeGroups(fach, PORIG), tasks = [], blocks = [];
     for (const g of groups) { blocks.push({ name: g.name, from: tasks.length, to: tasks.length + g.tasks.length }); tasks.push(...g.tasks); }
-    newRound("probe", tasks, { fach, blocks, blk: 0, given: {}, rating, review: false, expired: false, tEnd: Date.now() + PMS(), i: 0, label: `${fach === "de" ? "Probe Deutsch" : "Probe Mathe"} · ${blocks[0].name}` });
+    newRound("probe", tasks, { fach, blocks, blk: 0, given: {}, rating, orig: PORIG, review: false, expired: false, tEnd: Date.now() + PMS(), i: 0, label: `${fach === "de" ? "Probe Deutsch" : "Probe Mathe"}${PORIG ? " Original" : ""} · ${blocks[0].name}` });
   }
   function probeChrome() {
     const r = KR, b = r.blocks[r.blk];
-    const lab = $(".mlabel"); if (lab) lab.textContent = `${r.fach === "de" ? "Probe Deutsch" : "Probe Mathe"} · ${b.name}`;
+    const lab = $(".mlabel"); if (lab) lab.textContent = `${r.fach === "de" ? "Probe Deutsch" : "Probe Mathe"}${r.orig ? " Original" : ""} · ${b.name}`;
     const pc = $("#pchips"), pt = $("#ptime");
     if (pc) { pc.hidden = false; pc.innerHTML = Array.from({ length: b.to - b.from }, (_, j) => { const i = b.from + j; return `<button class="pchip${i === r.i ? " cur" : ""}${r.given[i] !== undefined ? " done" : ""}" data-act="k-pgo" data-v="${i}" aria-label="Aufgabe ${j + 1}${r.given[i] !== undefined ? ", beantwortet" : ""}">${j + 1}</button>`; }).join("") + `<button class="btn ghost pfin" data-act="k-pdone">Alles ansehen und abgeben →</button>`; }
     if (pt) pt.hidden = false;
@@ -271,7 +279,7 @@
     r.byArea = byArea; r.wrongList = wrongList;
     const ok = r.results.filter((x) => x.ok).length, n = r.results.length;
     r.ok = ok; r.n = n; r.pct = n ? Math.round((ok / n) * 100) : 0; r.xp = ok * 5 + 30; k.xp += r.xp;
-    k.probes.push({ date: dayKey(), fach: r.fach, n, ok, rating: r.rating, areas: byArea });
+    k.probes.push({ date: dayKey(), fach: r.fach, orig: !!r.orig, n, ok, rating: r.rating, areas: byArea });
     const p = todayPlan(); if (p && p.kind === "probe-" + r.fach) k.done[dayKey()] = true;
     r.done = true; r.tok = -1;
     core.addTime(r);
@@ -674,7 +682,7 @@
       <section class="card"><h2>Kompass 4: Stand</h2><p class="muted" style="margin-bottom:8px">Plan: ${doneDays} von ${K.PLAN.length} Tagen geschafft · ${k.total} Aufgaben · ${k.missionsDone} Trainingstage.</p>
         <table class="tbl"><thead><tr><th>Aufgabenart</th><th>Sterne</th><th>Richtig (letzte 10)</th><th>Aufgaben</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="muted" style="margin-top:8px">★ 3 von 4 richtig · ★★ 75 % der letzten 8 · ★★★ 90 % der letzten 10. Sterne bleiben.</p></section>
-      <section class="card"><h2>Proben</h2>${k.probes.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Fach</th><th>Richtig</th><th>Selbsteinschätzung</th></tr></thead><tbody>${k.probes.map((x) => `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}</td><td>${x.ok} / ${x.n}</td><td>${PLANT[x.rating] || ""} ${PLANT_NAME[x.rating] || ""}</td></tr>`).join("")}</tbody></table><p class="muted" style="margin-top:8px">Übungsproben, keine Note. Freie Antworten werden nicht gewertet.</p>` : `<p class="muted">Noch keine Probe gemacht.</p>`}</section>
+      <section class="card"><h2>Proben</h2>${k.probes.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Fach</th><th>Richtig</th><th>Selbsteinschätzung</th></tr></thead><tbody>${k.probes.map((x) => `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}${x.orig ? " (Original)" : ""}</td><td>${x.ok} / ${x.n}</td><td>${PLANT[x.rating] || ""} ${PLANT_NAME[x.rating] || ""}</td></tr>`).join("")}</tbody></table><p class="muted" style="margin-top:8px">Übungsproben, keine Note. Freie Antworten werden nicht gewertet.</p>` : `<p class="muted">Noch keine Probe gemacht.</p>`}</section>
       <section class="card"><h2>Einstellungen Kompass</h2><div class="setgrid">
         <label for="k-td">Datum Kompass Deutsch</label><input type="date" id="k-td" value="${esc(k.set.testDate || TEST_DE)}">
         <label for="k-boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label><input type="checkbox" id="k-boss" ${core.bossOn() ? "checked" : ""}>
@@ -715,7 +723,7 @@
       case "k-mat": if (r && !r.lock) { const [i, j] = v.split(":").map(Number); r.sel[i] = (r.sel[i] || []).includes(j) ? [] : [j]; drawAnswer(); } break;
       case "k-gap": if (r && !r.lock) { const i = +v; r.sel = r.sel.includes(i) ? r.sel.filter((x) => x !== i) : r.sel.concat(i); drawAnswer(); } break;
       case "k-self-go": if (r && !r.lock) { const ta = $("#kst"); r.selfText = ta ? ta.value.trim() : ""; if (r.mode === "probe") { submit({ self: r.selfText }); break; } r.selfStage = 1; drawAnswer(); } break;
-      case "k-probe": PENDING = v === "de" ? "de" : "ma"; go("k-pintro"); break;
+      case "k-probe": PENDING = /^de/.test(v) ? "de" : "ma"; PORIG = /orig/.test(v); go("k-pintro"); break;
       case "k-pstart": startProbe(PENDING, +v); break;
       case "k-pgo": if (r && r.mode === "probe" && !r.expired) { const i = +v, b = r.blocks[r.blk]; if (i >= b.from && i < b.to) { r.review = false; r.i = i; go("k-game"); } } break;
       case "k-pskip": if (r && r.mode === "probe" && !r.lock) probeNext(true); break;

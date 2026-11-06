@@ -68,6 +68,31 @@
     { id: "pizza", name: "Pizza", icon: "🍕", price: 12, full: 40 },
     { id: "kuchen", name: "Kuchen", icon: "🍰", price: 15, full: 50 },
   ];
+  // Zubehör (wird als Bild auf das Tier gelegt), Zimmer (Hintergrund) und Deko
+  const ACC = [
+    { id: "kappe", name: "Kappe", icon: "🧢", price: 8, slot: "head" },
+    { id: "hut", name: "Zylinder", icon: "🎩", price: 12, slot: "head" },
+    { id: "krone", name: "Krone", icon: "👑", price: 25, slot: "head" },
+    { id: "brille", name: "Sonnenbrille", icon: "🕶️", price: 10, slot: "eyes" },
+    { id: "schleife", name: "Schleife", icon: "🎀", price: 8, slot: "neck" },
+    { id: "kopfhoerer", name: "Kopfhörer", icon: "🎧", price: 15, slot: "ear" },
+  ];
+  const ROOMS = [
+    { id: "wiese", name: "Wiese", price: 0, bg: "linear-gradient(#bfe6ff 0 60%, #8fd18a 60%)" },
+    { id: "strand", name: "Strand", price: 15, bg: "linear-gradient(#aee2ff 0 45%, #4db6e8 45% 62%, #f4e2a8 62%)" },
+    { id: "schnee", name: "Schnee", price: 15, bg: "linear-gradient(#d7e8f7 0 60%, #ffffff 60%)" },
+    { id: "dschungel", name: "Dschungel", price: 20, bg: "linear-gradient(#c9f0c0 0 50%, #2f8f3a 50%)" },
+    { id: "weltall", name: "Weltall", price: 30, bg: "radial-gradient(circle at 20% 30%, #fff 0 1px, transparent 2px), radial-gradient(circle at 70% 20%, #fff 0 1px, transparent 2px), linear-gradient(#1b1f4a, #3b2a6e)" },
+  ];
+  const DECOR = [
+    { id: "pflanze", name: "Pflanze", icon: "🪴", price: 6 },
+    { id: "ball", name: "Ball", icon: "⚽", price: 6 },
+    { id: "bett", name: "Körbchen", icon: "🛏️", price: 12 },
+    { id: "luftballon", name: "Luftballons", icon: "🎈", price: 8 },
+    { id: "buch", name: "Bücher", icon: "📚", price: 10 },
+    { id: "stern", name: "Stern", icon: "⭐", price: 14 },
+  ];
+  const roomOf = (id) => ROOMS.find((r) => r.id === id) || ROOMS[0];
   // Münzen: je 10 Punkte eine, abzüglich Ausgaben
   const coins = (xp, spent) => Math.max(0, Math.floor(xp / 10) - (spent || 0));
   const stageName = (i, kind) => (kind && kind !== "hund" ? ["Baby-", "Junger ", "Großer ", "Held-"][i].replace(/-$/, "-") + kindOf(kind).word : STAGES[i].name);
@@ -166,7 +191,7 @@
       <span class="runner ghost" id="rghost">${dog(0, "run")}</span><span class="runner me" id="rme">${dog(xp, "run", "", kind)}</span><span class="rflag">🏁</span></div>`;
   }
 
-  const api = { KINDS, kindOf, SNACKS, coins, stageName, PAL, DOG, STAGES, GEAR, BOSSES, PROJECTS, BLOCK, stageOf, growth, gearOf, dog, torch, bossSvg, bossFor, bossHp, cells, building, projectSvg, ghostTrace, ghostAt, raceGoal, pos, raceHTML };
+  const api = { KINDS, kindOf, SNACKS, ACC, ROOMS, DECOR, roomOf, coins, stageName, PAL, DOG, STAGES, GEAR, BOSSES, PROJECTS, BLOCK, stageOf, growth, gearOf, dog, torch, bossSvg, bossFor, bossHp, cells, building, projectSvg, ghostTrace, ghostAt, raceGoal, pos, raceHTML };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DEBegleiter = api;
 })(typeof self !== "undefined" ? self : this);
