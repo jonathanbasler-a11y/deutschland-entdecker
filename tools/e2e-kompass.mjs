@@ -418,6 +418,16 @@ for (const fach of ["de", "ma"]) {
   const tabs = await p.$$('[data-act="ptab"]');
   for (const t of tabs) if ((await t.textContent()).includes("Kompass")) await t.click();
   check((await p.textContent(".parents")).includes("Kompass 4: Stand"), "Eltern-Übersicht: Kompass-Stand");
+  const ptxt = await p.textContent(".parents");
+  check(ptxt.includes("Überblick Kompass") && ptxt.includes("Lesen") && ptxt.includes("Raum und Form") && ptxt.includes("Daten und Zufall") && ptxt.includes("Zahlen und Rechnen"), "Eltern-Übersicht: Überblick mit allen Bereichen");
+  check(/Geübt/.test(ptxt) && /\d+ von \d+/.test(ptxt) && ptxt.includes("Noch nie geübt"), "Eltern-Übersicht: geübte Aufgabenarten und Rest");
+  // Probe-Eintrag mit Einschätzung gegen Ergebnis und Bereichen
+  await p.evaluate(() => { const k = window.__DE_K.KS(); k.probes.push({ date: "2026-11-07", fach: "ma", orig: true, n: 10, ok: 4, rating: 3, areas: { "ma.zahlen": { ok: 3, n: 5 }, "ma.raum": { ok: 1, n: 5 } } }); });
+  await p.click('[data-act="home"]'); await openParents(p);
+  for (const t of await p.$$('[data-act="ptab"]')) if ((await t.textContent()).includes("Kompass")) await t.click();
+  const ptxt2 = await p.textContent(".parents");
+  check(ptxt2.includes("4 / 10 (40 %)") && ptxt2.includes("schätzt sich höher ein") && ptxt2.includes("Zahlen und Rechnen 3/5") && ptxt2.includes("(Original)"), "Eltern-Übersicht: Probe mit Einschätzung, Ergebnis und Bereichen");
+  check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Eltern-Übersicht hochkant: kein seitliches Scrollen");
   await shot(p, "parents");
   check(p.errors.length === 0, "keine Konsolenfehler (Eltern) " + p.errors.join(" | "));
   await ctx.close();

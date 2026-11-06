@@ -678,11 +678,30 @@
       }).join("");
     }).join("");
     const doneDays = K.PLAN.filter((p) => k.done[p.day]).length;
-    return `
+    // Überblick je Bereich: Pflanzenstufe, Trefferquote der letzten Aufgaben, wie viele Aufgabenarten schon geübt, zuletzt geübt
+    const pctStage = (p) => (p >= 90 ? 3 : p >= 75 ? 2 : p >= 50 ? 1 : 0);
+    const dmy = (d) => (d ? d.slice(8, 10) + "." + d.slice(5, 7) + "." : "–");
+    const overview = (fach, title) => `<h3 style="margin:10px 0 4px">${title}</h3><table class="tbl"><thead><tr><th>Bereich</th><th>Stufe</th><th>Richtig (zuletzt)</th><th>Geübt</th><th>Zuletzt</th></tr></thead><tbody>${K.AREAS.filter((a) => a.fach === fach).map((a) => {
+      const ids = K.compsOfArea(a.id), recs = ids.flatMap((id) => (k.comp[id] && k.comp[id].recent) || []), tried = ids.filter((id) => k.comp[id] && k.comp[id].n > 0);
+      const last = tried.map((id) => k.comp[id].last || "").sort().pop(), acc = recs.length ? Math.round((recs.filter(Boolean).length / recs.length) * 100) : null;
+      return `<tr><td>${a.icon} ${esc(a.name)}</td><td>${tried.length ? PLANT[Math.floor(areaStars(a.id))] + " " + PLANT_NAME[Math.floor(areaStars(a.id))] : "–"}</td><td>${acc == null ? "–" : acc + " %"}</td><td>${tried.length} von ${ids.length}</td><td>${dmy(last)}</td></tr>`;
+    }).join("")}</tbody></table>`;
+    const weak = K.COMPS.filter((c) => k.comp[c.id] && k.comp[c.id].n >= 2 && starsOf(c.id) <= 1).map((c) => { const rec = k.comp[c.id].recent; return { c, acc: rec.filter(Boolean).length / (rec.length || 1) }; }).sort((x, y) => x.acc - y.acc).slice(0, 6);
+    const never = K.COMPS.filter((c) => !k.comp[c.id] || !k.comp[c.id].n).length;
+    const sec = `<section class="card"><h2>Überblick Kompass</h2>${overview("de", "Deutsch")}${overview("ma", "Mathe")}
+      <h3 style="margin:10px 0 4px">Das braucht noch Übung</h3>${weak.length ? `<ul>${weak.map((x) => `<li>${esc(compName(x.c.id))} <span class="muted">(${Math.round(x.acc * 100)} % richtig)</span></li>`).join("")}</ul>` : `<p class="muted">Noch nichts Auffälliges.</p>`}
+      <p class="muted">Noch nie geübt: ${never} von ${K.COMPS.length} Aufgabenarten. Der Plan hat ${doneDays} von ${K.PLAN.length} Tagen geschafft. Die Stufe ist der Durchschnitt der Sterne im Bereich.</p></section>`;
+    const probeRows = k.probes.map((x) => {
+      const pct = x.n ? Math.round((x.ok / x.n) * 100) : 0, st = pctStage(pct), r = x.rating;
+      const rel = r == null ? "" : r > st ? "schätzt sich höher ein" : r < st ? "schätzt sich niedriger ein" : "passt";
+      const parts = Object.entries(x.areas || {}).map(([id, v]) => { const a = K.AREAS.find((y) => y.id === id); return `${a ? esc(a.name) : id} ${v.ok}/${v.n}`; }).join(" · ");
+      return `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}${x.orig ? " (Original)" : ""}</td><td>${x.ok} / ${x.n} (${pct} %)</td><td>${PLANT[r] || ""} → ${PLANT[st]} ${rel}</td></tr>${parts ? `<tr><td colspan="4" class="muted">${parts}</td></tr>` : ""}`;
+    }).join("");
+    return `${sec}
       <section class="card"><h2>Kompass 4: Stand</h2><p class="muted" style="margin-bottom:8px">Plan: ${doneDays} von ${K.PLAN.length} Tagen geschafft · ${k.total} Aufgaben · ${k.missionsDone} Trainingstage.</p>
         <table class="tbl"><thead><tr><th>Aufgabenart</th><th>Sterne</th><th>Richtig (letzte 10)</th><th>Aufgaben</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="muted" style="margin-top:8px">★ 3 von 4 richtig · ★★ 75 % der letzten 8 · ★★★ 90 % der letzten 10. Sterne bleiben.</p></section>
-      <section class="card"><h2>Proben</h2>${k.probes.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Fach</th><th>Richtig</th><th>Selbsteinschätzung</th></tr></thead><tbody>${k.probes.map((x) => `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}${x.orig ? " (Original)" : ""}</td><td>${x.ok} / ${x.n}</td><td>${PLANT[x.rating] || ""} ${PLANT_NAME[x.rating] || ""}</td></tr>`).join("")}</tbody></table><p class="muted" style="margin-top:8px">Übungsproben, keine Note. Freie Antworten werden nicht gewertet.</p>` : `<p class="muted">Noch keine Probe gemacht.</p>`}</section>
+      <section class="card"><h2>Proben</h2>${k.probes.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Fach</th><th>Richtig</th><th>Einschätzung → Ergebnis</th></tr></thead><tbody>${probeRows}</tbody></table><p class="muted" style="margin-top:8px">Übungsproben, keine Note. Freie Antworten werden nicht gewertet. Die Selbsteinschätzung wählt Levi vor der Probe (Samen bis Blume).</p>` : `<p class="muted">Noch keine Probe gemacht.</p>`}</section>
       <section class="card"><h2>Einstellungen Kompass</h2><div class="setgrid">
         <label for="k-td">Datum Kompass Deutsch</label><input type="date" id="k-td" value="${esc(k.set.testDate || TEST_DE)}">
         <label for="k-boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label><input type="checkbox" id="k-boss" ${core.bossOn() ? "checked" : ""}>
