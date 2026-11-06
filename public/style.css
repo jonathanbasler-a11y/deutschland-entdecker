@@ -633,3 +633,38 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .snack .si { font-size: 2rem; }
 .snack:disabled { opacity: .4; cursor: default; }
 .coins { float: right; font-size: 1rem; }
+
+/* Kompass: Lesetext, Verbinden, Satzglieder trennen, Selbstprüfen */
+.kpass { background: var(--panel2); border: 3px solid #0b1d2e; padding: 10px 14px; margin: 0 0 12px; max-height: 34vh; overflow: auto; text-align: left; -webkit-overflow-scrolling: touch; }
+.kpass[hidden] { display: none; }
+.kpass .kptitle { display: block; font-size: 1.1rem; margin-bottom: 6px; }
+.kpass p { margin: 0 0 6px; line-height: 1.5; }
+.kpass .kline { margin: 0; position: relative; padding-left: 28px; line-height: 1.45; }
+.kpass .ln { position: absolute; left: 0; width: 22px; text-align: right; color: var(--muted); font-size: .8rem; }
+.kpass .kextra { margin-top: 8px; padding-top: 6px; border-top: 2px dashed var(--muted); font-size: .95rem; }
+.kpass .ksrc { display: block; margin-top: 6px; color: var(--muted); }
+.kcard.haspass .kqt { font-size: 1.15rem; }
+.kshow { font-family: ui-monospace, monospace; letter-spacing: .06em; word-break: break-all; font-size: 1.05rem; background: var(--panel2); padding: 8px 10px; margin: 0 0 8px; }
+.kmatch { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.kmrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: var(--panel2); padding: 8px 10px; }
+.kmrow .kml { flex: 1 1 220px; font-weight: 600; }
+.kmopts { display: flex; flex-wrap: wrap; gap: 6px; flex: 2 1 260px; }
+.kmo { border: 3px solid #0b1d2e; background: var(--panel); color: inherit; font: inherit; padding: 8px 10px; min-height: 44px; cursor: pointer; text-align: left; }
+.kmo[aria-pressed="true"] { background: #2d6cdf; color: #fff; }
+.kmo.ok { background: #2f8f3a; color: #fff; border-color: #1d5f25; }
+.kmo.bad { background: #b83232; color: #fff; border-color: #7e1f1f; }
+.kcut { display: flex; flex-wrap: wrap; align-items: center; row-gap: 10px; font-size: 1.2rem; justify-content: center; }
+.kcw { padding: 6px 2px; }
+.kgap { width: 26px; height: 44px; margin: 0 2px; background: transparent; border: 2px dashed var(--muted); cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.kgap i { display: block; width: 4px; height: 100%; background: transparent; }
+.kgap.on { border-style: solid; border-color: #2d6cdf; }
+.kgap.on i { background: #2d6cdf; }
+.kgap.ok { border-color: #2f8f3a; } .kgap.ok i { background: #2f8f3a; }
+.kgap.bad { border-color: #b83232; } .kgap.bad i { background: #b83232; }
+.kcuthint { margin: 8px 0 0; }
+.kself { width: 100%; box-sizing: border-box; font: inherit; font-size: 1.1rem; padding: 10px; min-height: 92px; background: #fff; color: #111; border: 3px solid #0b1d2e; }
+.kselfbox { text-align: left; background: var(--panel2); padding: 10px 14px; }
+.kselfbox p { margin: 0 0 6px; }
+.kselfbox .kmine { font-weight: 600; } .kselfbox .kmodel { font-weight: 700; color: #2f8f3a; }
+.kact { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+@media (max-width: 700px) { .kpass { max-height: 30vh; } .kmrow .kml { flex-basis: 100%; } }

@@ -61,8 +61,8 @@
   /* ================= Bereiche und Unterkompetenzen ================= */
   const AREAS = [
     { id: "de.sprache", fach: "de", name: "Sprache untersuchen", icon: "🔤", ready: true },
-    { id: "de.lesen", fach: "de", name: "Lesen", icon: "📖", ready: false },
-    { id: "de.recht", fach: "de", name: "Rechtschreiben", icon: "✏️", ready: false },
+    { id: "de.lesen", fach: "de", name: "Lesen", icon: "📖", ready: true, unit: true },
+    { id: "de.recht", fach: "de", name: "Rechtschreiben", icon: "✏️", ready: true },
     { id: "ma.zahlen", fach: "ma", name: "Zahlen und Rechnen", icon: "🔢", ready: true },
     { id: "ma.groessen", fach: "ma", name: "Größen und Messen", icon: "📏", ready: true },
     { id: "ma.muster", fach: "ma", name: "Muster und Strukturen", icon: "🔁", ready: true },
@@ -262,10 +262,15 @@
   function attachBank(bank) {
     for (const [id, def] of Object.entries(bank)) {
       if (COMP[id]) continue;
-      const c = { id, area: def.area, name: def.name, list: def.items };
+      const c = { id, area: def.area, name: def.name, list: def.items, solo: !!def.solo, passage: def.passage || null, source: def.source || "" };
       COMPS.push(c);
       COMP[id] = c;
     }
+  }
+
+  // Zusätzliche Aufgaben an bestehende Deutsch-Bänke anhängen (Schlüssel ohne "de.")
+  function extendBank(extra) {
+    for (const [k, items] of Object.entries(extra || {})) { const c = COMP["de." + k]; if (c && c.list && !c.extended) { c.list.push(...items); c.extended = true; } }
   }
 
   // Eine Aufgabe zu einer Unterkompetenz. seed bestimmt die Aufgabe eindeutig.
@@ -276,6 +281,8 @@
     let t;
     if (c.gen) t = c.gen(r, lv || 2);
     else { const i = seed % c.list.length; t = Object.assign({}, c.list[i]); t.idx = i; }
+    if (c.passage) t.passage = c.passage;
+    if (c.source) t.source = c.source;
     t.comp = compId;
     t.key = compId + ":" + seed;
     t.seed = seed;
@@ -290,6 +297,9 @@
     return t;
   }
 
+  // Leseeinheit: alle Fragen zu einem Text der Reihe nach
+  const unitTasks = (compId) => { const c = COMP[compId]; return c ? c.list.map((_, i) => task(compId, i)) : []; };
+
   /* ================= Auswertung ================= */
   // gibt { ok, partial } zurück
   function check(t, given) {
@@ -303,6 +313,15 @@
       return { ok: g.length === a.length && g.every((x, i) => x === a[i]) };
     }
     if (t.type === "order") return { ok: Array.isArray(given) && given.join("|") === t.items.join("|") };
+    // verbinden: je Zeile die Menge der gewählten Antworten (kann auch leer sein)
+    if (t.type === "match") {
+      const g = given || [];
+      return { ok: t.left.every((_, i) => { const a = (g[i] || []).slice().sort((x, y) => x - y).join(), b = t.ans[i].slice().sort((x, y) => x - y).join(); return a === b; }) };
+    }
+    // Trennstriche zwischen Wörtern: Menge der Lücken (Lücke i liegt hinter Wort i)
+    if (t.type === "cut") { const g = [...new Set(given || [])].sort((x, y) => x - y).join(), a = t.ans.slice().sort((x, y) => x - y).join(); return { ok: g === a }; }
+    // Kurzantwort: das Kind vergleicht selbst mit der Musterlösung (true/false)
+    if (t.type === "self") return { ok: given === true };
     if (t.type === "tf") return { ok: Array.isArray(given) && t.rows.every((row, i) => given[i] === row.ok) };
     if (t.type === "write") {
       const g = String(given || "").trim().replace(/\s+/g, " ");
@@ -319,6 +338,9 @@
     if (t.type === "multi") return t.ans.map((i) => t.opts[i]).join(", ");
     if (t.type === "pick") return t.ans.map((i) => t.tokens[i]).join(", ");
     if (t.type === "order") return t.items.join(" → ");
+    if (t.type === "match") return t.left.map((l, i) => `${l} ${t.ans[i].length ? t.ans[i].map((j) => t.right[j]).join(" / ") : "(nichts)"}`).join(" · ");
+    if (t.type === "cut") return t.tokens.map((w, i) => w + (t.ans.includes(i) ? " |" : "")).join(" ");
+    if (t.type === "self") return t.model;
     if (t.type === "tf") return t.rows.map((x) => `${x.s}: ${x.ok ? "richtig" : "falsch"}`).join(" · ");
     if (t.type === "write") return t.ans[0];
     return "";
@@ -384,10 +406,11 @@
     // Proben (kommen noch): bis dahin wie ein Training
     return [{ name: "Deutsch", areas: ["de"], n: 6 }, { name: "Mathe", areas: ["ma"], n: 6 }, { name: "Gemischt", areas: ["de", "ma"], n: 6 }];
   }
-  const compsOf = (fach) => COMPS.filter((c) => { const a = AREAS.find((x) => x.id === c.area); return a && a.ready && (!fach || a.fach === fach); }).map((c) => c.id);
+  // Lesetexte (solo) laufen nur als eigene Leseeinheit, nicht in den gemischten Etappen
+  const compsOf = (fach) => COMPS.filter((c) => { const a = AREAS.find((x) => x.id === c.area); return a && a.ready && !c.solo && (!fach || a.fach === fach); }).map((c) => c.id);
   const compsOfArea = (areaId) => COMPS.filter((c) => c.area === areaId).map((c) => c.id);
 
-  const api = { rng, int, pick, shuffled, fmt, fmtMoney, parseNum, words, STELLEN, AREAS, COMPS, COMP, attachBank, task, check, solution, starsFor, weight, buildRound, PLAN, planFor, etappen, compsOf, compsOfArea };
+  const api = { rng, int, pick, shuffled, fmt, fmtMoney, parseNum, words, STELLEN, AREAS, COMPS, COMP, attachBank, extendBank, task, unitTasks, check, solution, starsFor, weight, buildRound, PLAN, planFor, etappen, compsOf, compsOfArea };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DEKompass = api;
 })(typeof self !== "undefined" ? self : this);

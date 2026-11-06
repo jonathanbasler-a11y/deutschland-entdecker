@@ -64,6 +64,28 @@ async function answer(p, right = true) {
     return p.tap("#kgo");
   }
   if (t.type === "write") { await p.fill("#kwi", right ? t.ans[0] : "xyz"); return p.press("#kwi", "Enter"); }
+  if (t.type === "tf") {
+    for (let i = 0; i < t.rows.length; i++) await p.tap(`[data-act="k-tf"][data-v="${i}:${(right ? t.rows[i].ok : !t.rows[i].ok) ? 1 : 0}"]`);
+    return p.tap("#kgo");
+  }
+  if (t.type === "match") {
+    for (let i = 0; i < t.left.length; i++) {
+      if (right) { for (const j of t.ans[i]) await p.tap(`[data-act="k-mat"][data-v="${i}:${j}"]`); continue; }
+      // falsch: in Zeile 0 eine falsche Antwort wählen, die anderen leer lassen
+      if (i === 0) { const j = t.right.findIndex((_, k) => !t.ans[0].includes(k)); await p.tap(`[data-act="k-mat"][data-v="0:${j >= 0 ? j : 0}"]`); }
+    }
+    return p.tap("#kgo");
+  }
+  if (t.type === "cut") {
+    const want = right ? t.ans : [t.ans.includes(0) ? 1 : 0];
+    for (const i of want) await p.tap(`[data-act="k-gap"][data-v="${i}"]`);
+    return p.tap("#kgo");
+  }
+  if (t.type === "self") {
+    await p.fill("#kst", "meine Antwort");
+    await p.tap('[data-act="k-self-go"]');
+    return p.tap(`[data-act="k-self"][data-v="${right ? 1 : 0}"]`);
+  }
   throw new Error("unbekannter Typ " + t.type);
 }
 const view = (p) => p.evaluate(() => window.__DE.S && document.querySelector(".kresults") ? "results" : document.querySelector(".kgame") ? "game" : "other");
@@ -91,7 +113,7 @@ async function openParents(p) {
   check((await p.textContent(".kcal li.cur")).includes("6."), "Heute (6.11.) ist markiert");
   check((await p.textContent(".chip.lzk")).includes("12 Tagen"), "Countdown: Kompass in 12 Tagen");
   check(!!(await p.$('[data-act="k-check"]')), "Heute: Startcheck");
-  check((await p.$$(".karea")).length === 8 && (await p.$$(".karea[disabled]")).length === 4, "8 Bereiche, 4 kommen noch");
+  check((await p.$$(".karea")).length === 8 && (await p.$$(".karea[disabled]")).length === 2, "8 Bereiche, 2 kommen noch (Raum, Daten)");
   await shot(p, "home");
   await p.click('[data-act="k-check"]');
   check((await p.textContent("#cnt")) === "1 / 16", "Startcheck: 16 Aufgaben");
@@ -184,6 +206,53 @@ async function openParents(p) {
   const money = await p.evaluate(() => { const K = window.__DE_K.K; for (let s = 0; s < 200; s++) { const t = K.task("ma.geld", s); if (t.money) return s; } return -1; });
   check(money >= 0, "Geld-Aufgabe mit Komma gefunden");
   check(p.errors.length === 0, "keine Konsolenfehler (Aufgabentypen) " + p.errors.join(" | "));
+  await ctx.close();
+}
+
+// 3b) Neue Aufgabentypen gezielt: verbinden, trennen, selbst prüfen, Lesetext
+{
+  const { ctx, p } = await fresh("2026-11-12");
+  const back = async () => { await p.click('[data-act="k-quit"]'); await p.click('[data-act="subject"][data-v="kompass"]').catch(() => {}); };
+  const cases = [["de.satzmatch", "match"], ["de.zeitmatch", "match"], ["de.satzcut", "cut"], ["de.recht.trenne", "write"], ["de.recht.gross", "pick"], ["de.recht.rede", "choice"]];
+  for (const [id, type] of cases) {
+    await p.evaluate((id) => window.__DE_K.play([id]), id);
+    check((await cur(p)).type === type, `${id}: Typ ${type}`);
+    await answer(p, false);
+    check((await p.textContent("#fb")).includes("💡"), `${id}: erster Fehler gibt Tipp`);
+    await answer(p, false);
+    check(!!(await p.$("#knx")) && (await p.textContent("#fb")).includes("Lösung"), `${id}: zweiter Fehler zeigt Lösung`);
+    check((await p.$$eval("button", (bs) => bs.filter((x) => x.textContent.trim() === "Weiter").length)) === 1, `${id}: genau ein Weiter-Knopf`);
+    await shot(p, "solution-" + id);
+    await back();
+    await p.evaluate((id) => window.__DE_K.play([id]), id);
+    await answer(p, true);
+    check(!!(await p.$(".kcard.good")), `${id}: richtig wird grün`);
+    await back();
+  }
+  // Lesetext (Original 2025): Kurzantwort zum Selbstprüfen, dann stimmt / stimmt nicht
+  await p.evaluate(() => window.__DE_K.play(["de.lesen.kaugummi"]));
+  check(!!(await p.$("#kpass:not([hidden])")) && (await p.textContent("#kpass")).includes("Kaugummi"), "Lesetext steht über der Frage");
+  check((await p.textContent("#kpass .ksrc")).includes("IBBW"), "Quelle des Originaltexts steht dabei");
+  check((await p.textContent("#kpass .ln")) === "5", "Zeilennummer 5 steht am Rand");
+  check((await cur(p)).type === "self", "Kaugummi 1: Kurzantwort zum Selbstprüfen");
+  await p.fill("#kst", "Um die Zähne gesund zu halten.");
+  await p.tap('[data-act="k-self-go"]');
+  check((await p.textContent(".kmodel")).includes("Zähne"), "Musterlösung wird gezeigt");
+  await p.tap('[data-act="k-self"][data-v="1"]');
+  check(!!(await p.$(".kcard.good")), "Selbstprüfung: Ja zählt als richtig");
+  await p.waitForFunction(() => window.__DE_K.R.i === 1, null, { timeout: 4000 });
+  check((await cur(p)).type === "tf" && (await p.textContent(".ktf")).includes("stimmt nicht"), "Kaugummi 2: stimmt / stimmt nicht");
+  await shot(p, "lesen-tf");
+  const n = await playRound(p);
+  check((await view(p)) === "results", `Leseeinheit endet mit Ergebnis (${n + 2} Fragen)`);
+  check(await p.evaluate(() => window.__DE.S.kompass.comp["de.lesen.kaugummi"].n === 7), "Fortschritt je Text gespeichert (7 Fragen)");
+  await p.click('[data-act="home"]');
+  // Bereich Lesen startet den am wenigsten geübten Text
+  await p.click('[data-act="k-area"][data-v="de.lesen"]');
+  const lab = await p.textContent(".mlabel");
+  check(/Lesetext/.test(lab) && !lab.includes("Kaugummi"), "Lesen: nächster Text ist ein anderer: " + lab);
+  await shot(p, "lesen");
+  check(p.errors.length === 0, "keine Konsolenfehler (neue Typen) " + p.errors.join(" | "));
   await ctx.close();
 }
 

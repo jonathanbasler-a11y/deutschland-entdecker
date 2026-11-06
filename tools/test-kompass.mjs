@@ -5,6 +5,8 @@ const req = createRequire(import.meta.url);
 const K = req("../public/kompass-logic.js");
 const D = req("../public/kompass-data.js");
 K.attachBank(D.BANK);
+const T = req("../public/kompass-text.js");
+K.attachBank(T.BANK2); K.extendBank(T.EXTRA);
 
 let n = 0;
 const ok = (c, m) => { n++; assert.ok(c, m); };
@@ -91,6 +93,40 @@ for (const id of deComps) {
     if (t.type === "pick") { ok(K.check(t, t.ans.slice().reverse()).ok, "Reihenfolge beim Antippen egal: " + where); ok(!K.check(t, t.ans.slice(1)).ok || t.ans.length === 0, "fehlendes Wort ist falsch: " + where); }
   }
 }
+// Neue Aufgabentypen und Lesetexte
+for (const id of Object.keys(T.BANK2)) {
+  const def = T.BANK2[id], list = K.COMP[id].list;
+  ok(list.length >= (id.startsWith("de.lesen.") ? 6 : 4), `${id}: genug Aufgaben (${list.length})`);
+  if (id.startsWith("de.lesen.")) { ok(def.solo && def.passage && (def.passage.lines || def.passage.paras).length >= 3, "Lesetext hat Text: " + id); ok(K.unitTasks(id).length === list.length, "Leseeinheit: " + id); }
+  for (let i = 0; i < list.length; i++) {
+    const t = K.task(id, i, 2), where = `${id} #${i}: ${t.q}`;
+    ok(t.tip && t.explain && t.q, "Tipp, Erklärung, Frage: " + where);
+    if (t.type === "choice") { ok(new Set(t.opts).size === t.opts.length && t.ans >= 0 && t.ans < t.opts.length, "Antworten eindeutig: " + where); ok(K.check(t, t.ans).ok && !K.check(t, (t.ans + 1) % t.opts.length).ok, where); }
+    if (t.type === "multi") ok(t.ans.length >= 1 && t.ans.every((j) => j < t.opts.length) && K.check(t, t.ans).ok && !K.check(t, []).ok, where);
+    if (t.type === "pick") ok(t.ans.every((j) => j < t.tokens.length) && K.check(t, t.ans).ok && !K.check(t, t.ans.slice(1)).ok, where);
+    if (t.type === "write") ok(K.check(t, t.ans[0]).ok && !K.check(t, "xyzxyz").ok, where);
+    if (t.type === "tf") ok(t.rows.length >= 3 && K.check(t, t.rows.map((r) => r.ok)).ok && !K.check(t, t.rows.map((r) => !r.ok)).ok, where);
+    if (t.type === "order") ok(new Set(t.items).size === t.items.length && K.check(t, t.items.slice()).ok && !K.check(t, t.items.slice().reverse()).ok, where);
+    if (t.type === "match") {
+      ok(t.left.length === t.ans.length && t.ans.every((a) => a.every((j) => j < t.right.length)), "Verbinden: Antworten gültig: " + where);
+      ok(K.check(t, t.ans).ok, "Verbinden: Lösung wird erkannt: " + where);
+      ok(!K.check(t, t.left.map(() => [])).ok || t.ans.every((a) => !a.length), "Verbinden: leer ist falsch: " + where);
+      ok(K.solution(t).length > 5, where);
+    }
+    if (t.type === "cut") ok(t.ans.every((j) => j >= 0 && j < t.tokens.length - 1) && K.check(t, t.ans).ok && !K.check(t, []).ok, "Trennen: " + where);
+    if (t.type === "self") ok(t.model && K.check(t, true).ok && !K.check(t, false).ok && K.solution(t) === t.model, "Selbstprüfen: " + where);
+  }
+}
+// Einzelfälle, die stimmen müssen
+ok(K.task("de.recht.gross", 0).ans.length === 4, "Groß: Satz 1 hat 4 Wörter");
+ok(K.check(K.task("de.recht.trenne", 0), "Unsere Mannschaft hat das letzte Spiel verloren.").ok, "Wörter trennen: richtiger Satz");
+ok(!K.check(K.task("de.recht.trenne", 0), "unsere mannschaft hat das letzte spiel verloren").ok, "Wörter trennen: klein ist falsch");
+ok(K.check(K.task("de.recht.trenne", 0), "Unsere Mannschaft hat das letzte Spiel verloren").ok, "Wörter trennen: Punkt darf fehlen");
+ok(!K.compsOf("de").some((id) => id.startsWith("de.lesen.")), "Lesetexte sind nicht in den gemischten Etappen");
+ok(K.compsOfArea("de.lesen").length === 5 && K.compsOfArea("de.recht").length === 7, "Bereiche Lesen (5 Texte) und Rechtschreiben (7 Arten)");
+// Prüfen, dass Verbinden-Aufgaben aus dem Test stimmen (Kaugummi)
+{ const t = K.task("de.lesen.kaugummi", 3); ok(t.type === "match" && K.check(t, [[0], [2], [1]]).ok && !K.check(t, [[0], [1], [2]]).ok, "Kaugummi: Satzteile verbinden"); }
+{ const t = K.task("de.satzmatch", 0); ok(K.check(t, [[], [0], [], [0]]).ok && !K.check(t, [[0], [0], [0], [0]]).ok, "Satzglieder: Ein Kind kauen = falsch"); }
 // gemischte Antworten: richtige Antwort folgt beim Mischen
 for (let seed = 0; seed < 50; seed++) { const t = K.task("de.wortfamilie", seed); ok(/Farbe|Spiegel|Wolke|Sohn|Schrank|Lehrer|Kino|Bach|Hase|Kante/.test(t.opts[t.ans]), "Mischen behält die Lösung: " + t.q); }
 // Zeitformen bleiben in fester Reihenfolge

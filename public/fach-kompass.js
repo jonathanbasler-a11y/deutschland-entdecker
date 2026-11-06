@@ -119,8 +119,8 @@
   }
   function compsFor(areas) { return areas.flatMap((f) => K.compsOf(f)); }
   function startCheck() {
-    const de = K.compsOf("de"), ma = ["ma.stelle", "ma.runden", "ma.plus", "ma.mal", "ma.geteilt", "ma.laenge", "ma.zeit", "ma.folge"];
-    const tasks = de.slice(0, 8).map((id) => K.task(id, seed(), 1)).concat(ma.map((id) => K.task(id, seed(), 1)));
+    const de = ["de.wortart", "de.satzglied", "de.zeitform", "de.wortfamilie", "de.recht.gross", "de.recht.strat", "de.zusammen", "de.steigerung"].filter((id) => K.COMP[id]), ma = ["ma.stelle", "ma.runden", "ma.plus", "ma.mal", "ma.geteilt", "ma.laenge", "ma.zeit", "ma.folge"];
+    const tasks = de.map((id) => K.task(id, seed(), 1)).concat(ma.map((id) => K.task(id, seed(), 1)));
     newRound("check", tasks, { label: "Startcheck" });
   }
   function startMission() {
@@ -133,6 +133,12 @@
   function startArea(areaId) {
     const a = K.AREAS.find((x) => x.id === areaId);
     if (!a || !a.ready) return;
+    if (a.unit) {
+      // Lesen: ein Text mit allen Fragen; der am wenigsten geübte Text kommt zuerst
+      const ids = K.compsOfArea(areaId), sc = (id) => { const st = KS().comp[id]; return st ? (st.stars || 0) * 100 + st.n : -1; };
+      const pickId = TEST.kText || ids.slice().sort((x, y) => sc(x) - sc(y))[0];
+      return newRound("practice", K.unitTasks(pickId), { area: areaId, unit: pickId, label: K.COMP[pickId].name });
+    }
     newRound("practice", K.buildRound(K.compsOfArea(areaId), TEST.kRoundLen || 6, statsMap(), seed(), 2), { area: areaId, label: a.name });
   }
 
@@ -146,6 +152,7 @@
         <span class="count" id="cnt"></span><span class="combo" id="combo"></span><span class="xp" id="xpv"></span></div>
       <div class="kstage"><div class="mcard kcard" id="kcard">
         <small class="mlabel">${esc(r.label || "")}</small>
+        <div class="kpass" id="kpass" hidden></div>
         <div class="kq" id="kq"></div>
         <div class="kans" id="kans"></div>
         <div id="fb" class="mfb" aria-live="polite"></div>
@@ -174,9 +181,16 @@
       return finish();
     }
     const it = r.q[r.i], t = it.t;
-    r.cur = t; r.attempt = 0; r.lock = false; r.wait = false; r.input = ""; r.sel = []; r.order = [];
+    r.cur = t; r.attempt = 0; r.lock = false; r.wait = false; r.input = ""; r.sel = t.type === "match" ? t.left.map(() => []) : []; r.order = []; r.selfStage = 0; r.selfText = "";
     $("#kcard").classList.remove("good", "badc");
-    $("#kq").innerHTML = `<p class="kqt">${esc(t.q)}</p>${t.paper ? `<p class="kpaper">✏️ Rechne auf Papier wie im Test und tippe das Ergebnis ein.</p>` : ""}`;
+    const ps = $("#kpass"), P = t.passage;
+    if (ps) {
+      ps.hidden = !P;
+      ps.innerHTML = P ? `<b class="kptitle">${esc(P.title)}</b>${P.lines ? P.lines.map((l, i) => `<p class="kline">${(i + 1) % 5 === 0 ? `<span class="ln">${i + 1}</span>` : ""}${esc(l)}</p>`).join("") : P.paras.map((x) => `<p>${esc(x)}</p>`).join("")}${P.extra ? `<div class="kextra">${P.extra.map(esc).join("<br>")}</div>` : ""}${t.source ? `<small class="ksrc">${esc(t.source)}</small>` : ""}` : "";
+      ps.scrollTop = 0;
+    }
+    $("#kcard").classList.toggle("haspass", !!P);
+    $("#kq").innerHTML = `<p class="kqt">${esc(t.q)}</p>${t.show ? `<p class="kshow" aria-label="Buchstaben ohne Abstände">${esc(t.show)}</p>` : ""}${t.paper ? `<p class="kpaper">✏️ Rechne auf Papier wie im Test und tippe das Ergebnis ein.</p>` : ""}`;
     if (it.repeat) fb("hint", "Die kennst du schon von eben. Jetzt klappt's!");
     else if (it.boss && r.bossTries && r.bossTries[t.key]) fb("hint", "Die hat der Boss eben geblockt. Jetzt triffst du!");
     else fb();
@@ -203,7 +217,7 @@
     }
     if (t.type === "order") {
       if (!r.pool) r.pool = K.shuffled(K.rng(t.seed + 3), t.items);
-      a.innerHTML = `<div class="korder" id="korder">${r.order.map((x, i) => `<button class="kchip set" data-act="k-unorder" data-v="${i}">${esc(x)}</button>`).join("") || '<span class="muted">Tippe die Zahlen der Reihe nach an.</span>'}</div>
+      a.innerHTML = `<div class="korder" id="korder">${r.order.map((x, i) => `<button class="kchip set" data-act="k-unorder" data-v="${i}">${esc(x)}</button>`).join("") || '<span class="muted">${esc(t.hint || "Tippe die Zahlen der Reihe nach an.")}</span>'}</div>
         <div class="kpool">${r.pool.map((x, i) => `<button class="kchip" data-act="k-ord" data-v="${i}" ${r.order.includes(x) ? "disabled" : ""}>${esc(x)}</button>`).join("")}</div>`;
       act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo" ${r.order.length === t.items.length ? "" : "disabled"}>Prüfen</button>`;
       return;
@@ -215,8 +229,28 @@
       return;
     }
     if (t.type === "tf") {
-      a.innerHTML = `<table class="ktf">${t.rows.map((row, i) => `<tr><td>${esc(row.s)}</td><td><button class="segbtn" data-act="k-tf" data-v="${i}:1" aria-pressed="${r.sel[i] === true}">richtig</button><button class="segbtn" data-act="k-tf" data-v="${i}:0" aria-pressed="${r.sel[i] === false}">falsch</button></td></tr>`).join("")}</table>`;
+      a.innerHTML = `<table class="ktf">${t.rows.map((row, i) => `<tr><td>${esc(row.s)}</td><td><button class="segbtn" data-act="k-tf" data-v="${i}:1" aria-pressed="${r.sel[i] === true}">stimmt</button><button class="segbtn" data-act="k-tf" data-v="${i}:0" aria-pressed="${r.sel[i] === false}">stimmt nicht</button></td></tr>`).join("")}</table>`;
       act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo">Prüfen</button>`;
+      return;
+    }
+    if (t.type === "match") {
+      a.innerHTML = `<div class="kmatch">${t.left.map((l, i) => `<div class="kmrow"><span class="kml">${esc(l)}</span><div class="kmopts">${t.right.map((o, j) => `<button class="kmo" data-act="k-mat" data-v="${i}:${j}" aria-pressed="${(r.sel[i] || []).includes(j)}">${esc(o)}</button>`).join("")}</div></div>`).join("")}</div>`;
+      act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo">Prüfen</button>`;
+      return;
+    }
+    if (t.type === "cut") {
+      a.innerHTML = `<div class="kcut" role="group" aria-label="Satz">${t.tokens.map((w, i) => `<span class="kcw">${esc(w)}</span>${i < t.tokens.length - 1 ? `<button class="kgap ${r.sel.includes(i) ? "on" : ""}" data-act="k-gap" data-v="${i}" aria-pressed="${r.sel.includes(i)}" aria-label="Trennstrich nach ${esc(w)}"><i></i></button>` : ""}`).join("")}</div><p class="muted kcuthint">Tippe auf die Lücke, wo ein Satzglied zu Ende ist.</p>`;
+      act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo">Prüfen</button>`;
+      return;
+    }
+    if (t.type === "self") {
+      if (!r.selfStage) {
+        a.innerHTML = `<textarea id="kst" class="kself" rows="3" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Deine Antwort" placeholder="Schreibe deine Antwort in ganzen Sätzen">${esc(r.selfText || "")}</textarea>`;
+        act.innerHTML = `<button class="btn" data-act="k-self-go" id="kgo">Fertig, Lösung zeigen</button>`;
+      } else {
+        a.innerHTML = `<div class="kselfbox"><p class="muted">Du hast geschrieben:</p><p class="kmine">${esc(r.selfText) || "(nichts)"}</p><p class="muted">So kann die Antwort aussehen:</p><p class="kmodel">${esc(t.model)}</p><p>Hast du dasselbe gemeint?</p></div>`;
+        act.innerHTML = `<button class="btn" data-act="k-self" data-v="1" id="kgo">Ja, stimmt ungefähr ✅</button><button class="btn ghost" data-act="k-self" data-v="0">Da fehlt noch etwas</button>`;
+      }
     }
   }
   function drawInput() {
@@ -279,7 +313,7 @@
     if (r.attempt === 1) { r.combo = 0; if (!it.repeat && !it.boss) record(t, false); }
     if (it.boss) core.bossUI.block(r); else core.petReact("tilt");
     tone("bad");
-    if (r.attempt === 1 && r.mode !== "check") {
+    if (r.attempt === 1 && r.mode !== "check" && t.type !== "self") {
       fb("hint", `${it.boss ? "Der Boss blockt!" : res && res.caseOnly ? "Fast! Achte auf Groß- und Kleinschreibung." : "Nicht ganz."} 💡 ${esc(t.tip)}`);
       // Eingaben zurücksetzen, damit er es noch einmal versucht
       if (t.type === "num") { r.input = ""; setTimeout(drawInput, 500); const a = $("#mans"); if (a) a.classList.add("bad"); }
@@ -312,6 +346,9 @@
     if (t.type === "multi" || t.type === "pick") document.querySelectorAll("[data-act='k-tog']").forEach((b) => { b.disabled = true; const i = +b.dataset.v; if (t.ans.includes(i)) b.classList.add("ok"); else if (r.sel.includes(i)) b.classList.add("bad"); });
     if (t.type === "order" && !ok) { const o = $("#korder"); if (o) o.innerHTML = t.items.map((x) => `<span class="kchip ok">${esc(x)}</span>`).join(""); }
     if (t.type === "write") { const i = $("#kwi"); if (i) { i.classList.add(ok ? "ok" : "bad"); if (!ok) i.value = t.ans[0]; } }
+    if (t.type === "match") document.querySelectorAll(".kmo").forEach((b) => { b.disabled = true; const [i, j] = b.dataset.v.split(":").map(Number); if (t.ans[i].includes(j)) b.classList.add("ok"); else if ((r.sel[i] || []).includes(j)) b.classList.add("bad"); });
+    if (t.type === "cut") document.querySelectorAll(".kgap").forEach((b) => { b.disabled = true; const i = +b.dataset.v; b.classList.toggle("ok", t.ans.includes(i)); b.classList.toggle("bad", !t.ans.includes(i) && r.sel.includes(i)); });
+    if (t.type === "self") { const ta = $("#kst"); if (ta) ta.disabled = true; }
     const go = $("#kgo"); if (go) go.remove();
   }
 
@@ -439,6 +476,10 @@
       case "k-unorder": if (r && !r.lock) { r.order.splice(+v, 1); drawAnswer(); } break;
       case "k-tf": if (r && !r.lock) { const [i, val] = v.split(":"); r.sel[+i] = val === "1"; drawAnswer(); } break;
       case "k-check-ans": if (r && !r.lock) { const t = r.cur; submit(t.type === "order" ? r.order : t.type === "tf" ? r.sel : r.sel); } break;
+      case "k-mat": if (r && !r.lock) { const [i, j] = v.split(":").map(Number); r.sel[i] = (r.sel[i] || []).includes(j) ? [] : [j]; drawAnswer(); } break;
+      case "k-gap": if (r && !r.lock) { const i = +v; r.sel = r.sel.includes(i) ? r.sel.filter((x) => x !== i) : r.sel.concat(i); drawAnswer(); } break;
+      case "k-self-go": if (r && !r.lock) { const ta = $("#kst"); r.selfText = ta ? ta.value.trim() : ""; r.selfStage = 1; drawAnswer(); } break;
+      case "k-self": if (r && !r.lock && r.selfStage) submit(v === "1"); break;
       case "k-next": if (r && r.wait) next(); break;
       case "k-quit": if (r) { r.tok = -1; r.done = true; core.addTime(r); } go("home"); break;
       case "k-again": if (!r) return go("home"); if (r.mode === "practice") startArea(r.area); else if (r.mode === "mission") startMission(); else go("home"); break;
@@ -464,7 +505,7 @@
     key(v);
   });
 
-  window.__DE_K = { get R() { return KR; }, KS, K };
+  window.__DE_K = { get R() { return KR; }, KS, K, play: (ids) => newRound("practice", ids.flatMap((id, i) => (K.COMP[id] && K.COMP[id].solo ? K.unitTasks(id) : [K.task(id, i, 2)])), { area: "de.sprache", label: "Test" }) };
 
   return {
     id: "kompass", prefix: "k-", name: "Kompass 4", icon: "🧭",
