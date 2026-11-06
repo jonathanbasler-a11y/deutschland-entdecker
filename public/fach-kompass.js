@@ -181,7 +181,7 @@
       return finish();
     }
     const it = r.q[r.i], t = it.t;
-    r.cur = t; r.attempt = 0; r.lock = false; r.wait = false; r.input = ""; r.sel = t.type === "match" ? t.left.map(() => []) : []; r.order = []; r.selfStage = 0; r.selfText = "";
+    r.cur = t; r.attempt = 0; r.lock = false; r.wait = false; r.input = ""; r.sel = t.type === "match" ? t.left.map(() => []) : []; r.order = []; r.selfStage = 0; r.selfText = ""; r.showSol = false;
     $("#kcard").classList.remove("good", "badc");
     const ps = $("#kpass"), P = t.passage;
     if (ps) {
@@ -190,7 +190,8 @@
       ps.scrollTop = 0;
     }
     $("#kcard").classList.toggle("haspass", !!P);
-    $("#kq").innerHTML = `<p class="kqt">${esc(t.q)}</p>${t.show ? `<p class="kshow" aria-label="Buchstaben ohne Abstände">${esc(t.show)}</p>` : ""}${t.paper ? `<p class="kpaper">✏️ Rechne auf Papier wie im Test und tippe das Ergebnis ein.</p>` : ""}`;
+    const tab = t.table ? `<div class="ktabwrap"><table class="ktab"><thead><tr>${t.table.head.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead><tbody>${t.table.rows.map((row) => `<tr>${row.map((x, i) => (i === 0 ? `<th>${esc(x)}</th>` : `<td>${esc(x)}</td>`)).join("")}</tr>`).join("")}</tbody></table>${t.tableNote ? `<small class="muted">${esc(t.tableNote)}</small>` : ""}</div>` : "";
+    $("#kq").innerHTML = `<p class="kqt">${esc(t.q)}</p>${t.show ? `<p class="kshow" aria-label="Buchstaben ohne Abstände">${esc(t.show)}</p>` : ""}${t.fig ? `<div class="kfig">${t.fig}</div>` : ""}${tab}${t.paper ? `<p class="kpaper">✏️ Rechne auf Papier wie im Test und tippe das Ergebnis ein.</p>` : ""}`;
     if (it.repeat) fb("hint", "Die kennst du schon von eben. Jetzt klappt's!");
     else if (it.boss && r.bossTries && r.bossTries[t.key]) fb("hint", "Die hat der Boss eben geblockt. Jetzt triffst du!");
     else fb();
@@ -205,13 +206,35 @@
       a.innerHTML = `<div class="knumrow"><span class="mans empty" id="mans"></span>${t.unit ? `<span class="kunit">${esc(t.unit)}</span>` : ""}</div>${numpad(t.dec)}`;
       return drawInput();
     }
+    const lab = (o, i) => (t.figs ? `<span class="kfo">${t.figs[i]}</span><b>${esc(o)}</b>` : esc(o));
     if (t.type === "choice") {
-      a.innerHTML = `<div class="opts kopts">${t.opts.map((o, i) => `<button class="opt" data-act="k-opt" data-v="${i}">${esc(o)}</button>`).join("")}</div>`;
+      a.innerHTML = `<div class="opts kopts">${t.opts.map((o, i) => `<button class="opt${t.figs ? " figopt" : ""}" data-act="k-opt" data-v="${i}">${lab(o, i)}</button>`).join("")}</div>`;
+      return;
+    }
+    if (t.type === "grid") {
+      const sz = t.cell, pl = t.padL || 0, pb = t.padB || 0, top = t.yLabels ? 12 : 4, W = t.cols * sz, H = t.rows * sz, given = new Set(t.given.map((c) => c.join(","))), sel = new Set(r.sel), sol = new Set((t.solCells || []).map((c) => c.join(",")));
+      let g = `<rect width="${pl + W + 8}" height="${H + pb + top + 4}" fill="#fff"/>`;
+      for (let x = 0; x < t.cols; x++) for (let y = 0; y < t.rows; y++) {
+        const k = x + "," + y;
+        let fill = "#fff", stroke = "#cdd6e3", sw = 1;
+        if (given.has(k)) { fill = "#8fb8ff"; stroke = "#16304f"; sw = 2; }
+        else if (sel.has(k)) { fill = "#ffe08a"; stroke = "#a67c00"; sw = 2.5; }
+        if (r.showSol && !given.has(k)) {
+          if (sol.has(k)) { fill = "#b7f0c0"; stroke = "#2f8f3a"; sw = 2.5; }
+          else if (sel.has(k) && !t.verify) { fill = "#ffb3b3"; stroke = "#b83232"; sw = 2.5; }
+        }
+        g += `<rect x="${pl + 4 + x * sz}" y="${top + y * sz}" width="${sz}" height="${sz}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${given.has(k) || r.lock ? "" : ` data-act="k-cell" data-v="${k}" class="kcell"`}/>`;
+      }
+      if (t.axis != null) g += `<line x1="${pl + 4 + t.axis * sz}" y1="0" x2="${pl + 4 + t.axis * sz}" y2="${H + top + 4}" stroke="#d33" stroke-width="3" stroke-dasharray="8 6"/>`;
+      if (t.yLabels) t.yLabels.forEach((l, k) => { g += `<text x="${pl - 2}" y="${top + H - k * sz + 4}" text-anchor="end" font-size="13" fill="#16304f">${esc(l)}</text>`; });
+      if (t.xLabels) t.xLabels.forEach((l, i) => { g += `<text x="${pl + 4 + i * sz + sz / 2}" y="${top + H + 18}" text-anchor="middle" font-size="13" font-weight="700" fill="#16304f">${esc(l)}</text>`; });
+      a.innerHTML = `<div class="kgridwrap"><svg class="kgrid" viewBox="0 0 ${pl + W + 8} ${H + pb + top + 4}" role="group" aria-label="Raster zum Antippen">${g}</svg></div>`;
+      act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo">Prüfen</button>`;
       return;
     }
     if (t.type === "multi" || t.type === "pick") {
       const list = t.type === "pick" ? t.tokens : t.opts;
-      a.innerHTML = `<div class="${t.type === "pick" ? "kwords" : "opts kopts"}">${list.map((o, i) => `<button class="${t.type === "pick" ? "kword" : "opt"}" data-act="k-tog" data-v="${i}" aria-pressed="${r.sel.includes(i)}">${esc(o)}</button>`).join("")}</div>`;
+      a.innerHTML = `<div class="${t.type === "pick" ? "kwords" : "opts kopts"}">${list.map((o, i) => `<button class="${t.type === "pick" ? "kword" : "opt" + (t.figs ? " figopt" : "")}" data-act="k-tog" data-v="${i}" aria-pressed="${r.sel.includes(i)}">${t.type === "pick" ? esc(o) : lab(o, i)}</button>`).join("")}</div>`;
       act.innerHTML = `<button class="btn" data-act="k-check-ans" id="kgo">Prüfen</button>`;
       return;
     }
@@ -349,6 +372,7 @@
     if (t.type === "match") document.querySelectorAll(".kmo").forEach((b) => { b.disabled = true; const [i, j] = b.dataset.v.split(":").map(Number); if (t.ans[i].includes(j)) b.classList.add("ok"); else if ((r.sel[i] || []).includes(j)) b.classList.add("bad"); });
     if (t.type === "cut") document.querySelectorAll(".kgap").forEach((b) => { b.disabled = true; const i = +b.dataset.v; b.classList.toggle("ok", t.ans.includes(i)); b.classList.toggle("bad", !t.ans.includes(i) && r.sel.includes(i)); });
     if (t.type === "self") { const ta = $("#kst"); if (ta) ta.disabled = true; }
+    if (t.type === "grid") { r.showSol = true; drawAnswer(); }
     const go = $("#kgo"); if (go) go.remove();
   }
 
@@ -476,6 +500,15 @@
       case "k-unorder": if (r && !r.lock) { r.order.splice(+v, 1); drawAnswer(); } break;
       case "k-tf": if (r && !r.lock) { const [i, val] = v.split(":"); r.sel[+i] = val === "1"; drawAnswer(); } break;
       case "k-check-ans": if (r && !r.lock) { const t = r.cur; submit(t.type === "order" ? r.order : t.type === "tf" ? r.sel : r.sel); } break;
+      case "k-cell": if (r && !r.lock) {
+        if (r.cur.bars) {
+          // Balken: Tippen setzt die Höhe der Spalte auf dieses Kästchen (nochmal auf das oberste tippen löscht)
+          const [cx, cy] = v.split(",").map(Number), rows = r.cur.rows, lvl = rows - cy, have = r.sel.filter((k) => +k.split(",")[0] === cx).length;
+          r.sel = r.sel.filter((k) => +k.split(",")[0] !== cx);
+          if (lvl !== have) for (let j = 0; j < lvl; j++) r.sel.push(cx + "," + (rows - 1 - j));
+        } else r.sel = r.sel.includes(v) ? r.sel.filter((x) => x !== v) : r.sel.concat(v);
+        drawAnswer();
+      } break;
       case "k-mat": if (r && !r.lock) { const [i, j] = v.split(":").map(Number); r.sel[i] = (r.sel[i] || []).includes(j) ? [] : [j]; drawAnswer(); } break;
       case "k-gap": if (r && !r.lock) { const i = +v; r.sel = r.sel.includes(i) ? r.sel.filter((x) => x !== i) : r.sel.concat(i); drawAnswer(); } break;
       case "k-self-go": if (r && !r.lock) { const ta = $("#kst"); r.selfText = ta ? ta.value.trim() : ""; r.selfStage = 1; drawAnswer(); } break;
