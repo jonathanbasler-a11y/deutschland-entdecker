@@ -173,7 +173,9 @@ async function deStep(p, right = true) {
   check((await p.$$(".trophy.got")).length === 0, "Noch keine Boss-Pokale");
   await shot(p, "pet");
   // Tier wählen und Snacks (Münzen = Punkte / 10 minus Ausgaben)
-  check((await p.$$(".kind")).length === 7 && (await p.textContent(".kind.on b")) === "Hund", "Tierauswahl: 7 Tiere, Hund gewählt");
+  check((await p.$$(".kind")).length === 13 && (await p.textContent(".kind.on b")) === "Hund", "Tierauswahl: 13 Tiere, Hund gewählt");
+  const shapes = await p.evaluate(() => [...document.querySelectorAll(".kind .dog")].map((s) => s.textContent.trim() || "pixel"));
+  check(new Set(shapes).size === 13, "Alle 13 Tiere sehen verschieden aus (" + shapes.join(" ") + ")");
   await p.click('.kind[data-v="fuchs"]');
   check((await S(p)).pet.kind === "fuchs" && (await p.textContent(".petview h1")) === "Mein Fuchs" && (await p.textContent(".petmeta .stage")) === "Großer Fuchs", "Fuchs gewählt: Titel und Stufenname");
   check(await p.$(".bigdog .dog.k-fuchs"), "Fuchs wird gezeichnet");
@@ -190,14 +192,14 @@ async function deStep(p, right = true) {
   await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
   await p.click('.snack[data-v="acc:krone"]');
   let pp = (await S(p)).pet;
-  check(pp.spent === 25 && pp.acc.includes("krone") && pp.worn.includes("krone") && (await p.$(".bigdog .acc-head")), "Krone gekauft und aufgesetzt");
+  check(pp.spent === 25 && pp.acc.includes("krone") && pp.worn.includes("krone") && (await p.textContent(".bigdog .dog")).includes("👑"), "Krone gekauft und am Tier gezeichnet");
   await p.click('.snack[data-v="acc:hut"]');
   pp = (await S(p)).pet;
   check(pp.worn.length === 1 && pp.worn[0] === "hut", "Zylinder ersetzt die Krone (ein Kopf-Teil)");
   await p.click('.snack[data-v="krone"]');
   check((await S(p)).pet.worn[0] === "krone" && (await S(p)).pet.spent === 37, "Besessenes Teil wieder anziehen kostet nichts");
   await p.click('.snack[data-v="krone"]');
-  check((await S(p)).pet.worn.length === 0 && (await p.$$(".bigdog .acc")).length === 0, "Ausziehen");
+  check((await S(p)).pet.worn.length === 0 && !(await p.textContent(".bigdog .dog")).includes("👑"), "Ausziehen");
   await p.click('.snack[data-v="room:weltall"]');
   pp = (await S(p)).pet;
   check(pp.room === "weltall" && pp.spent === 67 && /1b1f4a/.test(await p.getAttribute(".room", "style")), "Zimmer Weltall gekauft und bezogen");
@@ -210,6 +212,16 @@ async function deStep(p, right = true) {
   check(await p.isDisabled('.snack[data-v="acc:kappe"]'), "Zu wenig Münzen: Zubehör gesperrt");
   await p.click('.kind[data-v="hund"]');
   check((await p.textContent(".petmeta .stage")) === "Großer Hund", "zurück zum Hund");
+  // Spielstand überlebt: Hauptschlüssel weg -> zweite Kopie; beide weg -> IndexedDB-Spiegel
+  await p.click('.kind[data-v="panda"]');
+  await p.waitForTimeout(400);
+  await ev(p, "(localStorage.removeItem('deutschland-entdecker-v1'), true)");
+  await p.reload(); await p.waitForSelector("#app *");
+  check((await S(p)).pet.kind === "panda", "Hauptschlüssel gelöscht: Stand kommt aus der zweiten Kopie");
+  await ev(p, "(localStorage.removeItem('deutschland-entdecker-v1'), localStorage.removeItem('deutschland-entdecker-v1-bak'), true)");
+  await p.reload();
+  await p.waitForFunction(() => window.__DE && window.__DE.S.pet.kind === "panda", null, { timeout: 6000 }).catch(() => {});
+  check((await S(p)).pet.kind === "panda", "Beide Schlüssel gelöscht: Stand kommt aus IndexedDB zurück");
   check(p.errors.length === 0, "keine Konsolenfehler " + p.errors.join(" | "));
   await ctx.close();
 }
@@ -371,6 +383,25 @@ for (const [name, w, h] of [["iPad Air quer", 1180, 820], ["iPad Air hoch", 820,
   check(await noH(), `${name}: Mein Hund ohne seitliches Scrollen`);
   if (shots && /Handy/.test(name)) await shot(p, name.replace(/\s+/g, "-") + "-pet");
   check(p.errors.length === 0, `${name}: keine Konsolenfehler ` + p.errors.join(" | "));
+  await ctx.close();
+}
+
+// 6) Geschenk: 5000 Punkte einmalig, 24 Stunden dreifache Punkte (Zusatz wird nur im Zeitfenster gesammelt)
+{
+  const { ctx, p } = await fresh({ width: 1180, height: 820 }, { gift: true });
+  check((await S(p)).gift === 5000 && (await ev(p, "window.__DE.totalXp()")) === 5000, "Geschenk: 5000 Punkte");
+  const bo = (await S(p)).boost;
+  check(bo && bo.mult === 3 && bo.until - Date.now() > 23 * 3600000, "Aufholbonus für 24 Stunden gesetzt");
+  check((await ev(p, "(window.__DE.S.xp += 100, window.__DE.totalXp())")) === 5300, "Im Bonus zählen 100 Punkte dreifach (5300)");
+  await ev(p, "(window.__DE.S.boost.until = Date.now() - 1, window.__DE.S.xp += 100, window.__DE.totalXp())");
+  check((await ev(p, "window.__DE.totalXp()")) === 5400, "Nach dem Bonus zählen Punkte einfach (5400)");
+  await p.click('[data-act="pet"]');
+  check(!(await p.$(".boostline")), "Abgelaufener Bonus wird nicht mehr angezeigt");
+  await ev(p, "(window.__DE.S.boost.until = Date.now() + 3600000, true)");
+  await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
+  check(await p.$(".boostline"), "Laufender Bonus steht beim Tier");
+  await p.reload(); await p.waitForSelector("#app *");
+  check((await S(p)).gift === 5000, "Geschenk kommt nur einmal (auch nach Neuladen)");
   await ctx.close();
 }
 
