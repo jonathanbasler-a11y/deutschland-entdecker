@@ -48,21 +48,200 @@
     { id: "torch", name: "Fackel", xp: 1400 },
     { id: "cape", name: "Umhang", xp: 2000 },
   ];
-  // Tiere zur Auswahl: gleiche Pixelfigur, andere Farben und kleine Zusätze
-  const EARS = [[13, 0, 2, 2, "o"], [18, 0, 2, 2, "o"], [13, 1, 1, 1, "p"]];
+  // Jedes Tier hat eine eigene Pixelfigur (Blickrichtung rechts, Raster ~23×17). Farben über pal.
+  // Form: body + zwei Schwanz-/Bein-Frames fürs Wedeln und Laufen (wie beim Hund).
+  const SHAPE = {
+    hund: DOG,
+    fuchs: {
+      w: 24, h: 17,
+      tailA: [[0, 4, 5, 5, "o"], [1, 5, 4, 3, "b"], [0, 8, 3, 3, "o"]],
+      tailB: [[0, 6, 6, 4, "o"], [1, 7, 4, 2, "b"], [1, 9, 3, 2, "o"]],
+      legsA: [[5, 12, 3, 5, "o"], [6, 12, 1, 4, "B"], [12, 12, 3, 5, "o"], [13, 12, 1, 4, "b"]],
+      legsB: [[4, 12, 3, 5, "o"], [5, 12, 1, 4, "B"], [13, 12, 3, 5, "o"], [14, 12, 1, 4, "b"]],
+      body: [
+        [4, 8, 11, 5, "o"], [5, 9, 9, 3, "b"], [7, 11, 5, 1, "l"],
+        [14, 2, 8, 9, "o"], [15, 3, 6, 7, "b"], [16, 7, 4, 2, "l"],
+        [20, 5, 4, 4, "o"], [21, 6, 2, 2, "l"], [22, 5, 2, 2, "k"],
+        [15, 0, 2, 3, "o"], [19, 0, 2, 3, "o"], [16, 1, 1, 1, "p"],
+        [17, 4, 2, 2, "k"], [17, 4, 1, 1, "w"], [19, 9, 2, 1, "o"],
+      ],
+    },
+    katze: {
+      w: 23, h: 17,
+      tailA: [[1, 1, 2, 8, "o"], [1, 1, 2, 2, "b"], [0, 0, 2, 2, "o"]],
+      tailB: [[2, 2, 2, 8, "o"], [2, 2, 2, 2, "b"], [1, 1, 2, 2, "o"]],
+      legsA: [[5, 13, 2, 4, "o"], [11, 13, 2, 4, "o"]],
+      legsB: [[6, 13, 2, 4, "o"], [12, 13, 2, 4, "o"]],
+      body: [
+        [4, 8, 10, 5, "o"], [5, 9, 8, 3, "b"], [6, 10, 1, 2, "o"], [9, 10, 1, 2, "o"],
+        [13, 3, 7, 8, "o"], [14, 4, 5, 6, "b"], [15, 7, 3, 2, "l"],
+        [18, 5, 3, 4, "o"], [19, 6, 2, 2, "l"], [20, 5, 2, 2, "k"],
+        [14, 1, 2, 3, "o"], [14, 1, 1, 2, "p"], [18, 1, 2, 3, "o"], [18, 1, 1, 2, "p"],
+        [16, 5, 2, 2, "k"], [16, 5, 1, 1, "w"], [17, 10, 2, 1, "p"],
+      ],
+    },
+    panda: {
+      w: 23, h: 17,
+      tailA: [[2, 8, 3, 3, "o"]],
+      tailB: [[1, 9, 3, 3, "o"]],
+      legsA: [[5, 13, 4, 4, "o"], [6, 13, 2, 3, "B"], [12, 13, 4, 4, "o"], [13, 13, 2, 3, "b"]],
+      legsB: [[4, 13, 4, 4, "o"], [5, 13, 2, 3, "B"], [13, 13, 4, 4, "o"], [14, 13, 2, 3, "b"]],
+      body: [
+        [4, 7, 12, 7, "b"], [5, 8, 10, 5, "l"], [6, 12, 8, 1, "b"],
+        [13, 2, 8, 8, "b"], [14, 3, 6, 6, "l"],
+        [14, 0, 3, 3, "o"], [19, 0, 3, 3, "o"],
+        [15, 4, 3, 3, "o"], [16, 5, 1, 1, "k"], [16, 5, 1, 1, "w"],
+        [19, 5, 2, 2, "o"], [20, 5, 1, 1, "k"],
+        [18, 8, 3, 2, "o"], [8, 9, 3, 3, "o"],
+      ],
+    },
+    wolf: {
+      w: 24, h: 17,
+      tailA: [[0, 5, 5, 4, "o"], [1, 6, 3, 2, "b"]],
+      tailB: [[0, 7, 5, 3, "o"], [1, 8, 3, 1, "b"]],
+      legsA: [[5, 11, 3, 6, "o"], [6, 11, 1, 5, "B"], [13, 11, 3, 6, "o"], [14, 11, 1, 5, "b"]],
+      legsB: [[4, 11, 3, 6, "o"], [5, 11, 1, 5, "B"], [14, 11, 3, 6, "o"], [15, 11, 1, 5, "b"]],
+      body: [
+        [4, 7, 12, 5, "o"], [5, 8, 10, 3, "b"],
+        [14, 1, 8, 9, "o"], [15, 2, 6, 7, "b"], [16, 6, 4, 2, "l"],
+        [20, 4, 4, 5, "o"], [21, 5, 2, 2, "l"], [22, 4, 2, 2, "k"],
+        [15, 0, 2, 2, "o"], [19, 0, 2, 2, "o"],
+        [17, 3, 2, 2, "k"], [17, 3, 1, 1, "w"], [19, 9, 2, 1, "o"],
+      ],
+    },
+    tiger: {
+      w: 24, h: 17,
+      tailA: [[0, 5, 4, 3, "o"], [1, 6, 2, 1, "k"], [0, 7, 3, 2, "b"]],
+      tailB: [[0, 7, 5, 3, "o"], [1, 8, 2, 1, "k"]],
+      legsA: [[5, 12, 3, 5, "o"], [6, 12, 1, 4, "B"], [12, 12, 3, 5, "o"], [13, 12, 1, 4, "b"]],
+      legsB: [[4, 12, 3, 5, "o"], [5, 12, 1, 4, "B"], [13, 12, 3, 5, "o"], [14, 12, 1, 4, "b"]],
+      body: [
+        [4, 8, 11, 5, "o"], [5, 9, 9, 3, "b"], [7, 9, 1, 3, "k"], [10, 9, 1, 3, "k"],
+        [14, 2, 8, 9, "o"], [15, 3, 6, 7, "b"], [16, 4, 1, 5, "k"], [18, 4, 1, 4, "k"],
+        [20, 5, 4, 4, "o"], [21, 6, 2, 2, "l"], [22, 5, 2, 2, "k"],
+        [15, 0, 2, 3, "o"], [19, 0, 2, 3, "o"], [15, 1, 1, 1, "p"],
+        [17, 4, 2, 2, "k"], [17, 4, 1, 1, "w"], [6, 10, 1, 2, "o"], [9, 10, 1, 2, "o"], [12, 10, 1, 2, "o"],
+      ],
+    },
+    drache: {
+      w: 25, h: 18,
+      tailA: [[0, 8, 5, 3, "o"], [0, 7, 2, 2, "y"], [1, 9, 3, 1, "b"]],
+      tailB: [[0, 9, 5, 3, "o"], [0, 8, 2, 2, "y"], [1, 10, 3, 1, "b"]],
+      legsA: [[6, 13, 3, 5, "o"], [7, 13, 1, 4, "B"], [14, 13, 3, 5, "o"], [15, 13, 1, 4, "b"]],
+      legsB: [[5, 13, 3, 5, "o"], [6, 13, 1, 4, "B"], [15, 13, 3, 5, "o"], [16, 13, 1, 4, "b"]],
+      body: [
+        [5, 8, 12, 6, "o"], [6, 9, 10, 4, "b"], [8, 7, 2, 2, "y"], [11, 7, 2, 2, "y"],
+        [8, 3, 4, 6, "o"], [9, 4, 2, 4, "b"], // Hals
+        [15, 1, 8, 9, "o"], [16, 2, 6, 7, "b"], [17, 6, 4, 2, "l"],
+        [21, 4, 4, 5, "o"], [22, 5, 2, 2, "l"], [23, 4, 2, 2, "k"], [22, 8, 2, 2, "r"],
+        [17, 0, 2, 2, "y"], [20, 0, 2, 2, "y"],
+        [18, 3, 2, 2, "k"], [18, 3, 1, 1, "w"],
+        [3, 5, 4, 4, "o"], [4, 6, 2, 2, "b"], // Flügel
+      ],
+    },
+    einhorn: {
+      w: 24, h: 17,
+      tailA: [[1, 4, 3, 5, "o"], [2, 5, 1, 3, "p"]],
+      tailB: [[0, 6, 4, 3, "o"], [1, 7, 2, 1, "p"]],
+      legsA: [[5, 12, 3, 5, "o"], [6, 12, 1, 4, "B"], [12, 12, 3, 5, "o"], [13, 12, 1, 4, "b"]],
+      legsB: [[4, 12, 3, 5, "o"], [5, 12, 1, 4, "B"], [13, 12, 3, 5, "o"], [14, 12, 1, 4, "b"]],
+      body: [
+        [4, 8, 11, 5, "o"], [5, 9, 9, 3, "b"], [6, 11, 6, 1, "l"],
+        [14, 2, 8, 9, "o"], [15, 3, 6, 7, "b"], [16, 7, 4, 2, "l"],
+        [20, 5, 4, 4, "o"], [21, 6, 2, 2, "l"], [22, 5, 2, 2, "k"],
+        [18, -1, 2, 4, "y"], [18, -1, 1, 2, "Y"], // Horn
+        [14, 1, 3, 2, "p"], [19, 1, 2, 2, "p"], // Mähne
+        [17, 4, 2, 2, "k"], [17, 4, 1, 1, "w"],
+      ],
+    },
+    pinguin: {
+      w: 16, h: 18,
+      tailA: [[6, 14, 3, 2, "o"]],
+      tailB: [[7, 14, 3, 2, "o"]],
+      legsA: [[4, 15, 3, 3, "y"], [9, 15, 3, 3, "y"]],
+      legsB: [[3, 15, 3, 3, "y"], [10, 15, 3, 3, "y"]],
+      body: [
+        [3, 5, 10, 10, "o"], [4, 6, 8, 8, "w"], [5, 7, 6, 6, "l"],
+        [2, 7, 2, 5, "o"], [12, 7, 2, 5, "o"], // Flossen
+        [4, 1, 8, 6, "o"], [5, 2, 6, 4, "b"],
+        [6, 3, 2, 2, "k"], [6, 3, 1, 1, "w"], [9, 3, 2, 2, "k"], [9, 3, 1, 1, "w"],
+        [7, 5, 3, 2, "y"],
+      ],
+    },
+    eule: {
+      w: 18, h: 17,
+      tailA: [[7, 14, 4, 2, "o"]],
+      tailB: [[8, 14, 4, 2, "o"]],
+      legsA: [[5, 14, 2, 3, "y"], [11, 14, 2, 3, "y"]],
+      legsB: [[4, 14, 2, 3, "y"], [12, 14, 2, 3, "y"]],
+      body: [
+        [3, 5, 12, 10, "o"], [4, 6, 10, 8, "b"], [5, 8, 8, 5, "l"],
+        [2, 6, 3, 7, "o"], [13, 6, 3, 7, "o"], // Flügel
+        [4, 1, 10, 7, "o"], [5, 2, 8, 5, "b"],
+        [5, 3, 3, 3, "y"], [6, 4, 1, 1, "k"], [10, 3, 3, 3, "y"], [11, 4, 1, 1, "k"],
+        [8, 6, 2, 2, "k"], [4, 0, 2, 2, "o"], [12, 0, 2, 2, "o"],
+      ],
+    },
+    hase: {
+      w: 20, h: 18,
+      tailA: [[2, 10, 3, 3, "l"]],
+      tailB: [[1, 11, 3, 3, "l"]],
+      legsA: [[5, 13, 3, 5, "o"], [11, 13, 4, 5, "o"], [12, 14, 2, 3, "B"]],
+      legsB: [[4, 13, 3, 5, "o"], [12, 13, 4, 5, "o"], [13, 14, 2, 3, "B"]],
+      body: [
+        [4, 8, 10, 6, "o"], [5, 9, 8, 4, "b"], [6, 12, 5, 1, "l"],
+        [12, 4, 7, 7, "o"], [13, 5, 5, 5, "b"], [14, 7, 3, 2, "l"],
+        [16, 6, 3, 3, "o"], [17, 7, 1, 1, "p"], [17, 6, 2, 2, "k"], [17, 6, 1, 1, "w"],
+        [12, -1, 2, 6, "o"], [12, 0, 1, 4, "p"], [15, -1, 2, 6, "o"], [15, 0, 1, 4, "p"],
+      ],
+    },
+    koala: {
+      w: 20, h: 17,
+      tailA: [[2, 10, 2, 2, "o"]],
+      tailB: [[1, 11, 2, 2, "o"]],
+      legsA: [[5, 13, 4, 4, "o"], [11, 13, 4, 4, "o"]],
+      legsB: [[4, 13, 4, 4, "o"], [12, 13, 4, 4, "o"]],
+      body: [
+        [4, 7, 12, 7, "o"], [5, 8, 10, 5, "b"], [6, 11, 7, 1, "l"],
+        [6, 2, 10, 8, "o"], [7, 3, 8, 6, "b"],
+        [4, 1, 4, 4, "o"], [4, 2, 3, 3, "p"], [14, 1, 4, 4, "o"], [15, 2, 3, 3, "p"],
+        [8, 5, 2, 2, "k"], [8, 5, 1, 1, "w"], [12, 5, 2, 2, "k"], [12, 5, 1, 1, "w"],
+        [10, 7, 2, 2, "k"],
+      ],
+    },
+    dino: {
+      w: 26, h: 17,
+      tailA: [[0, 8, 7, 3, "o"], [0, 7, 2, 2, "y"], [1, 9, 5, 1, "b"]],
+      tailB: [[0, 9, 7, 3, "o"], [0, 8, 2, 2, "y"], [1, 10, 5, 1, "b"]],
+      legsA: [[10, 12, 4, 5, "o"], [11, 12, 2, 4, "B"], [16, 12, 3, 5, "o"], [17, 12, 1, 4, "b"]],
+      legsB: [[9, 12, 4, 5, "o"], [10, 12, 2, 4, "B"], [17, 12, 3, 5, "o"], [18, 12, 1, 4, "b"]],
+      body: [
+        [8, 7, 10, 6, "o"], [9, 8, 8, 4, "b"],
+        [14, 2, 5, 7, "o"], [15, 3, 3, 5, "b"], // Hals hoch
+        [17, 0, 7, 6, "o"], [18, 1, 5, 4, "b"], [20, 2, 3, 3, "l"],
+        [22, 1, 3, 3, "o"], [23, 2, 1, 1, "k"], [21, 4, 2, 2, "r"],
+        [18, -1, 2, 2, "y"], [20, -1, 1, 2, "y"],
+        [12, 5, 2, 2, "o"], [14, 6, 2, 2, "o"], // kurze Arme
+      ],
+    },
+  };
   const KINDS = [
-    { id: "hund", name: "Hund", word: "Hund", pal: {}, extra: [] },
-    { id: "fuchs", name: "Fuchs", word: "Fuchs", pal: { b: "#e8742a", B: "#c45a16", o: "#4a2008", l: "#fff3e0", e: "#4a2008" }, extra: EARS },
-    { id: "katze", name: "Katze", word: "Katze", pal: { b: "#9aa3ad", B: "#7b848e", o: "#2c3138", l: "#e9edf2", e: "#2c3138" }, extra: [...EARS, [6, 8, 1, 3, "o"], [9, 8, 1, 3, "o"]] },
-    { id: "panda", name: "Panda", word: "Panda", pal: { b: "#ffffff", B: "#e8e8e8", o: "#111111", l: "#ffffff", e: "#111111" }, extra: [[16, 2, 4, 4, "o"], [17, 3, 2, 2, "k"], [17, 3, 1, 1, "w"]] },
-    { id: "wolf", name: "Wolf", word: "Wolf", pal: { b: "#8e969f", B: "#6b737c", o: "#2a2f36", l: "#d9dee3", e: "#2a2f36" }, extra: EARS },
-    { id: "tiger", name: "Tiger", word: "Tiger", pal: { b: "#f0922b", B: "#d0731a", o: "#3a1c08", l: "#fff0d8", e: "#3a1c08" }, extra: [...EARS, [6, 8, 1, 3, "o"], [9, 8, 1, 3, "o"], [12, 8, 1, 3, "o"], [16, 2, 1, 2, "o"]] },
-    { id: "drache", name: "Drache", word: "Drache", pal: { b: "#4cbf5a", B: "#2f8f3a", o: "#14391a", l: "#d7f5a8", e: "#14391a" }, extra: [[14, -1, 1, 2, "y"], [19, -1, 1, 2, "y"], [5, 6, 1, 2, "y"], [8, 6, 1, 2, "y"], [11, 6, 1, 2, "y"]] },
+    { id: "hund", name: "Hund", word: "Hund", pal: {} },
+    { id: "fuchs", name: "Fuchs", word: "Fuchs", pal: { b: "#e8742a", B: "#c45a16", o: "#4a2008", l: "#fff3e0", e: "#4a2008" } },
+    { id: "katze", name: "Katze", word: "Katze", pal: { b: "#9aa3ad", B: "#7b848e", o: "#2c3138", l: "#e9edf2", e: "#2c3138" } },
+    { id: "panda", name: "Panda", word: "Panda", pal: { b: "#ffffff", B: "#e8e8e8", o: "#111111", l: "#f7f7f7", e: "#111111" } },
+    { id: "wolf", name: "Wolf", word: "Wolf", pal: { b: "#8e969f", B: "#6b737c", o: "#2a2f36", l: "#d9dee3", e: "#2a2f36" } },
+    { id: "tiger", name: "Tiger", word: "Tiger", pal: { b: "#f0922b", B: "#d0731a", o: "#3a1c08", l: "#fff0d8", e: "#3a1c08" } },
+    { id: "drache", name: "Drache", word: "Drache", pal: { b: "#4cbf5a", B: "#2f8f3a", o: "#14391a", l: "#d7f5a8", e: "#14391a" } },
+    { id: "einhorn", name: "Einhorn", word: "Einhorn", pal: { b: "#f2e6ff", B: "#d9c2f2", o: "#6b4a9e", l: "#fff7ff", e: "#6b4a9e", p: "#ff8fd0" } },
+    { id: "pinguin", name: "Pinguin", word: "Pinguin", pal: { b: "#2a2f36", B: "#1b1f24", o: "#111111", l: "#ffffff", e: "#111111" } },
+    { id: "eule", name: "Eule", word: "Eule", pal: { b: "#8a5a2b", B: "#6e4520", o: "#3b2412", l: "#e8c48a", e: "#3b2412", y: "#f0d24a" } },
+    { id: "hase", name: "Hase", word: "Hase", pal: { b: "#e8d0b0", B: "#c9a882", o: "#6e4219", l: "#fff5e6", e: "#6e4219", p: "#ffb6c8" } },
+    { id: "koala", name: "Koala", word: "Koala", pal: { b: "#9aa3ad", B: "#7b848e", o: "#3a4048", l: "#e9edf2", e: "#3a4048", p: "#c5a090" } },
+    { id: "dino", name: "Dino", word: "Dino", pal: { b: "#5ecf7a", B: "#3aa355", o: "#1a4d28", l: "#c8f5a8", e: "#1a4d28" } },
   ];
-  // Außer dem Pixel-Hund haben alle Tiere ihre eigene Gestalt (Emoji im Bild); weitere Tiere zur Auswahl
-  const EMO = { fuchs: "🦊", katze: "🐱", panda: "🐼", wolf: "🐺", tiger: "🐯", drache: "🐲", einhorn: "🦄", pinguin: "🐧", eule: "🦉", hase: "🐰", koala: "🐨", dino: "🦕" };
-  [["einhorn", "Einhorn"], ["pinguin", "Pinguin"], ["eule", "Eule"], ["hase", "Hase"], ["koala", "Koala"], ["dino", "Dino"]].forEach(([id, name]) => KINDS.push({ id, name, word: name, pal: {}, extra: [] }));
   const kindOf = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
+  const shapeOf = (id) => SHAPE[kindOf(id).id] || DOG;
   const SNACKS = [
     { id: "apfel", name: "Apfel", icon: "🍎", price: 3, full: 15 },
     { id: "keks", name: "Keks", icon: "🍪", price: 5, full: 20 },
@@ -105,30 +284,35 @@
     return { stage: i, name: stageName(i, kind), next: nx ? stageName(i + 1, kind) : null, need: nx ? nx.xp - xp : 0, pct: nx ? Math.round(((xp - cur.xp) / (nx.xp - cur.xp)) * 100) : 100 };
   }
   const gearOf = (xp) => GEAR.filter((g) => xp >= g.xp).map((g) => g.id);
-  // Hund als SVG. Zwei Bilder für Schwanz und Beine, die CSS abwechselt (wedeln, laufen).
+  // Tier als SVG. Zwei Bilder für Schwanz und Beine, die CSS abwechselt (wedeln, laufen).
   function dog(xp, cls, label, kind, worn) {
-    const gear = gearOf(xp), K = kindOf(kind), pal = Object.assign({}, PAL, K.pal);
-    if (EMO[K.id]) {
-      // eigene Gestalt je Tier; wächst mit der Stufe, Ausrüstung als kleine Zeichen
-      const st = stageOf(xp), S = [58, 68, 78, 88][st], a = (t, x, y, f) => `<text x="${x}" y="${y}" font-size="${f}" text-anchor="middle">${t}</text>`;
-      const on = (slot) => (worn || []).map((id) => ACC.find((x) => x.id === id)).find((x) => x && x.slot === slot);
-      const ic = (slot, x, y, f) => { const it = on(slot); return it ? a(it.icon, x, y, f) : ""; };
-      // Zubehör sitzt am Gesicht: kommt Kopfschmuck, entfällt der Helm; Schleife ersetzt den Schal
-      const g = (gear.includes("scarf") && !on("neck") ? a("🧣", 50, 96, S * 0.4) : "") + (gear.includes("helm") && !on("head") ? a("⛑️", 50, 88 - S * 0.62, S * 0.45) : "") + (gear.includes("cape") ? a("🏅", 84, 92, 24) : "");
-      return `<svg class="dog emo k-${K.id} st${st} ${cls || ""}" viewBox="0 0 100 100" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${ic("ear", 50, 88 - S * 0.02, S * 1.0)}${a(EMO[K.id], 50, 88, S)}${g}${ic("eyes", 50, 88 - S * 0.36, S * 0.42)}${ic("neck", 50, 96, S * 0.38)}${ic("head", 50, 88 - S * 0.62, S * 0.5)}</svg>`;
-    }
-    const rects = (list) => rectsP(list, pal);
+    const gear = gearOf(xp), K = kindOf(kind), pal = Object.assign({}, PAL, K.pal), sh = shapeOf(K.id);
+    const R = (list) => rectsP(list || [], pal);
+    const on = (slot) => (worn || []).map((id) => ACC.find((x) => x.id === id)).find((x) => x && x.slot === slot);
+    const ic = (t, x, y, f) => `<text x="${x}" y="${y}" font-size="${f}" text-anchor="middle">${t}</text>`;
     let s = "";
-    if (gear.includes("cape")) s += rects(DOG.capeBack);
-    s += `<g class="f1">${rects(DOG.tailA)}</g><g class="f2">${rects(DOG.tailB)}</g>`;
-    s += `<g class="l1">${rects(DOG.legsA)}</g><g class="l2">${rects(DOG.legsB)}</g>`;
-    s += rects(DOG.body);
-    if (gear.includes("cape")) s += rects(DOG.cape);
-    if (gear.includes("scarf")) s += rects(DOG.scarf);
-    if (gear.includes("cape")) s += rects(DOG.medal);
-    if (K.extra.length) s += rects(K.extra);
-    if (gear.includes("helm")) s += rects(DOG.helm);
-    return `<svg class="dog k-${K.id} st${stageOf(xp)} ${cls || ""}" viewBox="0 -2 ${DOG.w} ${DOG.h + 2}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${s}</svg>`;
+    if (K.id === "hund" && gear.includes("cape")) s += R(DOG.capeBack);
+    s += `<g class="f1">${R(sh.tailA)}</g><g class="f2">${R(sh.tailB)}</g>`;
+    s += `<g class="l1">${R(sh.legsA)}</g><g class="l2">${R(sh.legsB)}</g>`;
+    s += R(sh.body);
+    if (K.id === "hund") {
+      if (gear.includes("cape")) s += R(DOG.cape);
+      if (gear.includes("scarf")) s += R(DOG.scarf);
+      if (gear.includes("cape")) s += R(DOG.medal);
+      if (gear.includes("helm")) s += R(DOG.helm);
+    } else {
+      // Ausrüstung am Kopf (Emoji), weil die Pixel-Formen unterschiedlich sind
+      const hx = sh.w - 3, hy = 4;
+      if (gear.includes("scarf") && !on("neck")) s += ic("🧣", hx - 2, hy + 7, 4);
+      if (gear.includes("helm") && !on("head")) s += ic("⛑️", hx, hy, 4);
+      if (gear.includes("cape")) s += ic("🏅", hx + 1, hy + 6, 3);
+    }
+    // Gekauftes Zubehör (für große und kleine Ansicht, falls kein HTML-Overlay)
+    for (const slot of ["ear", "head", "eyes", "neck"]) {
+      const it = on(slot);
+      if (it) s += ic(it.icon, sh.w - (slot === "neck" ? 5 : 3), slot === "neck" ? 10 : slot === "eyes" ? 5 : 2, 4);
+    }
+    return `<svg class="dog k-${K.id} st${stageOf(xp)} ${cls || ""}" viewBox="0 -2 ${sh.w} ${sh.h + 2}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${s}</svg>`;
   }
   const torch = () => svg(4, 9, rects([[1, 3, 2, 6, "o"], [1, 4, 2, 5, "e"], [0, 0, 4, 4, "f"], [1, 1, 2, 2, "y"], [1, 0, 1, 1, "y"]]), "torch");
 
@@ -200,10 +384,10 @@
   const pos = (n, goal) => Math.min(100, Math.round((n / goal) * 1000) / 10);
   function raceHTML(xp, kind) {
     return `<div class="race" id="race" aria-label="Rennen gegen deinen Rekord"><i id="tm"></i><span class="rlane"></span>
-      <span class="runner ghost" id="rghost">${dog(0, "run")}</span><span class="runner me" id="rme">${dog(xp, "run", "", kind)}</span><span class="rflag">🏁</span></div>`;
+      <span class="runner ghost" id="rghost">${dog(0, "run", "", kind)}</span><span class="runner me" id="rme">${dog(xp, "run", "", kind)}</span><span class="rflag">🏁</span></div>`;
   }
 
-  const api = { KINDS, kindOf, SNACKS, ACC, ROOMS, DECOR, roomOf, coins, stageName, PAL, DOG, STAGES, GEAR, BOSSES, PROJECTS, BLOCK, stageOf, growth, gearOf, dog, torch, bossSvg, bossFor, bossHp, cells, building, projectSvg, ghostTrace, ghostAt, raceGoal, pos, raceHTML };
+  const api = { KINDS, kindOf, shapeOf, SHAPE, SNACKS, ACC, ROOMS, DECOR, roomOf, coins, stageName, PAL, DOG, STAGES, GEAR, BOSSES, PROJECTS, BLOCK, stageOf, growth, gearOf, dog, torch, bossSvg, bossFor, bossHp, cells, building, projectSvg, ghostTrace, ghostAt, raceGoal, pos, raceHTML };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DEBegleiter = api;
 })(typeof self !== "undefined" ? self : this);

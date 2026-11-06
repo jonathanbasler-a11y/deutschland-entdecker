@@ -45,6 +45,8 @@ jobs:
         run: node tools/e2e-blatt.mjs
       - name: Alte und kaputte Spielstände
         run: node tools/test-migration.mjs
+      - name: Fortschritt bleibt nach Neuladen und Update
+        run: node tools/test-progress-update.mjs
       - name: Tageswechsel, Serie, Countdown
         run: node tools/test-tageswechsel.mjs
       - name: Zufälliges Durchklicken

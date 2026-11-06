@@ -37,6 +37,18 @@ assert.equal(B.ghostAt([100, 200, 300], 250), 2);
 assert.equal(B.raceGoal([1, 2]), 9);
 assert.equal(B.raceGoal(new Array(12).fill(1)), 13);
 assert.equal(B.pos(20, 9), 100);
+// Jedes Tier: eigene Pixelgestalt, kein Emoji als Hauptfigur
+assert.equal(B.KINDS.length, 13);
+for (const k of B.KINDS) {
+  const sh = B.shapeOf(k.id);
+  assert.ok(sh && sh.body && sh.body.length >= 8, k.id + " hat Pixel-Körper");
+  const svg = B.dog(0, "", "", k.id);
+  assert.ok(svg.includes("k-" + k.id) && svg.includes("<rect"), k.id + " wird als Pixel-SVG gezeichnet");
+  assert.ok(!/\p{Extended_Pictographic}/u.test(svg), k.id + " ohne Emoji-Hauptfigur");
+}
+assert.equal(new Set(B.KINDS.map((k) => B.dog(0, "", "", k.id))).size, 13, "alle Gestalten verschieden");
+assert.notEqual(B.dog(0, "", "", "fuchs"), B.dog(0, "", "", "hund"), "Fuchs ≠ Hund");
+assert.notEqual(B.dog(0, "", "", "pinguin"), B.dog(0, "", "", "eule"), "Pinguin ≠ Eule");
 console.log("ok   Logik des Begleiters");
 
 const root = path.resolve("public");
@@ -174,11 +186,13 @@ async function deStep(p, right = true) {
   await shot(p, "pet");
   // Tier wählen und Snacks (Münzen = Punkte / 10 minus Ausgaben)
   check((await p.$$(".kind")).length === 13 && (await p.textContent(".kind.on b")) === "Hund", "Tierauswahl: 13 Tiere, Hund gewählt");
-  const shapes = await p.evaluate(() => [...document.querySelectorAll(".kind .dog")].map((s) => s.textContent.trim() || "pixel"));
-  check(new Set(shapes).size === 13, "Alle 13 Tiere sehen verschieden aus (" + shapes.join(" ") + ")");
+  const shapes = await p.evaluate(() => [...document.querySelectorAll(".kind .dog")].map((s) => ({ id: [...s.classList].find((c) => c.startsWith("k-")), html: s.innerHTML, emo: /\p{Extended_Pictographic}/u.test(s.textContent) })));
+  check(shapes.length === 13 && new Set(shapes.map((s) => s.html)).size === 13, "Alle 13 Tiere haben eine eigene Pixelgestalt");
+  check(shapes.every((s) => !s.emo), "Keine Emoji-Tiere mehr (echte Pixel)");
+  check(shapes[0].id === "k-hund" && shapes.some((s) => s.id === "k-fuchs") && shapes.some((s) => s.id === "k-dino"), "Klassen k-hund, k-fuchs, k-dino vorhanden");
   await p.click('.kind[data-v="fuchs"]');
   check((await S(p)).pet.kind === "fuchs" && (await p.textContent(".petview h1")) === "Mein Fuchs" && (await p.textContent(".petmeta .stage")) === "Großer Fuchs", "Fuchs gewählt: Titel und Stufenname");
-  check(await p.$(".bigdog .dog.k-fuchs"), "Fuchs wird gezeichnet");
+  check(await p.$(".bigdog .dog.k-fuchs") && (await p.$eval(".bigdog .dog.k-fuchs", (e) => e.querySelectorAll("rect").length)) > 10, "Fuchs wird als Pixelgestalt gezeichnet");
   const c0 = await p.textContent("#coins");
   check(c0.includes("95"), "Münzen: 950 Punkte = 95 " + c0);
   await p.click('.snack[data-v="keks"]');
@@ -192,14 +206,14 @@ async function deStep(p, right = true) {
   await p.click('[data-act="home"]'); await p.click('[data-act="pet"]');
   await p.click('.snack[data-v="acc:krone"]');
   let pp = (await S(p)).pet;
-  check(pp.spent === 25 && pp.acc.includes("krone") && pp.worn.includes("krone") && (await p.textContent(".bigdog .dog")).includes("👑"), "Krone gekauft und am Tier gezeichnet");
+  check(pp.spent === 25 && pp.acc.includes("krone") && pp.worn.includes("krone") && (await p.textContent(".bigdog")).includes("👑"), "Krone gekauft und am Tier gezeichnet");
   await p.click('.snack[data-v="acc:hut"]');
   pp = (await S(p)).pet;
   check(pp.worn.length === 1 && pp.worn[0] === "hut", "Zylinder ersetzt die Krone (ein Kopf-Teil)");
   await p.click('.snack[data-v="krone"]');
   check((await S(p)).pet.worn[0] === "krone" && (await S(p)).pet.spent === 37, "Besessenes Teil wieder anziehen kostet nichts");
   await p.click('.snack[data-v="krone"]');
-  check((await S(p)).pet.worn.length === 0 && !(await p.textContent(".bigdog .dog")).includes("👑"), "Ausziehen");
+  check((await S(p)).pet.worn.length === 0 && !(await p.textContent(".bigdog")).includes("👑"), "Ausziehen");
   await p.click('.snack[data-v="room:weltall"]');
   pp = (await S(p)).pet;
   check(pp.room === "weltall" && pp.spent === 67 && /1b1f4a/.test(await p.getAttribute(".room", "style")), "Zimmer Weltall gekauft und bezogen");
@@ -252,8 +266,10 @@ async function deStep(p, right = true) {
   }
   await openParents();
   const restore = JSON.stringify({ askedName: true, gift2: true, xp: 42, pet: { name: "BackupHund", kind: "wolf", blocks: 0, bosses: {}, lastGreet: "", petted: 0, stage: 0, gear: 0 } });
-  await p.setInputFiles("#bkfile", { name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(restore) });
-  await p.waitForFunction(() => window.__DE && window.__DE.S.pet && window.__DE.S.pet.name === "BackupHund", null, { timeout: 6000 }).catch(() => {});
+  await Promise.all([
+    p.waitForFunction(() => window.__DE && window.__DE.S.pet && window.__DE.S.pet.name === "BackupHund", null, { timeout: 10000 }),
+    p.setInputFiles("#bkfile", { name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(restore) }),
+  ]).catch(() => {});
   check((await S(p)).pet.name === "BackupHund" && (await S(p)).pet.kind === "wolf" && (await S(p)).xp === 42, "Sicherung laden stellt Name, Tier und Punkte wieder her");
   await openParents();
   await p.setInputFiles("#bkfile", { name: "nein.json", mimeType: "application/json", buffer: Buffer.from('{"hello":1}') });
