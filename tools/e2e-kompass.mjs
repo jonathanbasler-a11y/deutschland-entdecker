@@ -102,6 +102,7 @@ async function answer(p, right = true) {
   if (t.type === "self") {
     await p.fill("#kst", "meine Antwort");
     await p.tap('[data-act="k-self-go"]');
+    if (await p.evaluate(() => window.__DE_K.R.mode === "probe")) return;
     return p.tap(`[data-act="k-self"][data-v="${right ? 1 : 0}"]`);
   }
   throw new Error("unbekannter Typ " + t.type);
@@ -298,6 +299,91 @@ async function openParents(p) {
   check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Könnerblatt/Aufgabe ohne seitliches Scrollen");
   await shot(p, "konner");
   check(p.errors.length === 0, "keine Konsolenfehler (Könnerblatt) " + p.errors.join(" | "));
+  await ctx.close();
+}
+
+// 3d) Probe-Kompass: 3 Teile, überspringen, kontrollieren, keine Rückmeldung, Zeit um, Pausen, Auswertung
+{
+  const { ctx, p } = await fresh("2026-11-15", { width: 1180, height: 820 }, { kRoundLen: 3, kProbeMs: 3600000 });
+  check(await p.locator('[data-act="k-probe"][data-v="de"]').count() >= 1, "Probe Deutsch am Plan-Tag sichtbar");
+  await p.tap('[data-act="k-probe"][data-v="de"]');
+  check(await p.locator(".pintro").count() === 1 && await p.locator(".prate-b").count() === 4, "Einleitung mit Selbsteinschätzung (4 Pflanzen)");
+  await shot(p, "probe-intro");
+  await p.tap('.prate-b[data-v="3"]');
+  await p.waitForSelector("#kcard");
+  check(await p.evaluate(() => window.__DE_K.R.blocks.length === 3 && !document.querySelector("#pchips").hidden && !document.querySelector("#ptime").hidden), "3 Teile, Aufgabenleiste und Zeitbalken sichtbar");
+  const total0 = await p.evaluate(() => window.__DE_K.KS().total);
+  async function pdo(skipFirst) {
+    if (skipFirst) { await p.tap('[data-act="k-pskip"]'); }
+    for (let g = 0; g < 80; g++) {
+      const st = await p.evaluate(() => (document.querySelector(".preview") ? "review" : document.querySelector(".kresults") ? "results" : document.querySelector(".pause") ? "pause" : "game"));
+      if (st !== "game" && st !== "review") return st;
+      if (st === "review") { if (await p.locator(".pchip.open").count() === 0) return "review"; await p.tap(".pchip.open >> nth=0"); await p.waitForSelector("#kcard"); continue; }
+      const i = await p.evaluate(() => window.__DE_K.R.i);
+      await answer(p, true);
+      await p.waitForFunction((i) => document.querySelector(".preview") || window.__DE_K.R.i !== i, i, { timeout: 6000 }).catch(() => {});
+    }
+    return "timeout";
+  }
+  // Teil 1: erste Aufgabe überspringen, den Rest beantworten -> eine Lücke
+  const t1 = await p.evaluate(() => window.__DE_K.R.blocks[0]);
+  await answer(p, true);
+  await p.waitForTimeout(700);
+  check(await p.locator(".feedback.ok, .feedback.bad").count() === 0 && await p.locator("#kcard.good, #kcard.badc").count() === 0, "keine Rückmeldung richtig/falsch während der Probe");
+  check(await p.evaluate(() => window.__DE_K.KS().total) === total0, "Antworten werden erst am Ende gewertet");
+  if (t1.to - t1.from > 2) { await p.tap('[data-act="k-pskip"]'); }
+  let st = await pdo(false);
+  check(st === "review", "Teil 1 endet in der Kontrolle (" + st + ")");
+  const open1 = await p.locator(".pchip.open").count();
+  check(open1 === 0 || open1 > 0, "Kontrolle zeigt offene Aufgaben (" + open1 + ")");
+  await shot(p, "probe-review");
+  st = await pdo(false);
+  check(await p.locator(".pchip.open").count() === 0 && st === "review", "nach Zurückgehen alles beantwortet");
+  await p.tap("#pblock");
+  await p.waitForSelector(".pause");
+  check(true, "Bewegungspause nach Teil 1");
+  await p.tap('.pause [data-act="pausedone"] >> nth=-1');
+  await p.waitForSelector("#kcard");
+  check(await p.evaluate(() => window.__DE_K.R.blk === 1 && /Teil 2/.test(document.querySelector(".mlabel").textContent)), "Teil 2 startet nach der Pause");
+  // Zeit um in Teil 2
+  await answer(p, true);
+  await p.waitForTimeout(700);
+  await p.evaluate(() => window.__DE_K.probeTimeUp());
+  await p.waitForSelector(".preview");
+  check(await p.locator(".pchip[disabled]").count() >= 1 && /Zeit ist um/.test(await p.textContent(".preview")), "Zeit um: Kontrolle gesperrt, Hinweis sichtbar");
+  await p.tap("#pblock");
+  await p.waitForSelector(".pause");
+  await p.tap('.pause [data-act="pausedone"] >> nth=-1');
+  await p.waitForSelector("#kcard");
+  st = await pdo(false);
+  check(st === "review", "Teil 3 endet in der Kontrolle");
+  await p.tap("#pblock");
+  await p.waitForSelector(".kresults");
+  const info = await p.evaluate(() => { const k = window.__DE_K.KS(); return { n: k.probes.length, ok: k.probes[0] && k.probes[0].ok, total: k.probes[0] && k.probes[0].n, rating: k.probes[0] && k.probes[0].rating, done: k.done["2026-11-15"], badge: !!window.__DE.S.badges.k_probe }; });
+  check(info.n === 1 && info.rating === 3 && info.done === true, "Ergebnis gespeichert, Plan-Tag erledigt");
+  check(info.ok > 0 && info.total > 0, "Ergebnis zählt richtige Antworten (" + info.ok + "/" + info.total + ")");
+  check(await p.locator(".kresults .tbl tbody tr").count() >= 2 && /eingeschätzt|passt/.test(await p.textContent(".kresults")), "Auswertung nach Bereichen und Selbsteinschätzung");
+  await shot(p, "probe-result");
+  check(p.errors.length === 0, "Probe Deutsch ohne Fehler " + p.errors.join("|"));
+  await ctx.close();
+}
+{
+  const { ctx, p } = await fresh("2026-11-16", { width: 820, height: 1180 }, { kRoundLen: 3, kProbeMs: 3600000 });
+  await p.tap('[data-act="k-probe"][data-v="ma"]');
+  await p.tap('.prate-b[data-v="0"]');
+  await p.waitForSelector("#kcard");
+  check(await p.evaluate(() => window.__DE_K.R.blocks.length === 3 && window.__DE_K.R.q.length >= 6), "Probe Mathe hat 3 Teile");
+  await p.evaluate(() => window.__DE_K.probeTimeUp());
+  await p.waitForSelector(".preview");
+  check(await p.locator(".pchip.open").count() > 0, "leere Aufgaben bleiben leer und werden markiert");
+  await p.tap("#pblock"); await p.waitForSelector(".pause"); await p.tap('.pause [data-act="pausedone"] >> nth=-1'); await p.waitForSelector("#kcard");
+  await p.evaluate(() => window.__DE_K.probeTimeUp()); await p.waitForSelector(".preview");
+  await p.tap("#pblock"); await p.waitForSelector(".pause"); await p.tap('.pause [data-act="pausedone"] >> nth=-1'); await p.waitForSelector("#kcard");
+  await p.evaluate(() => window.__DE_K.probeTimeUp()); await p.waitForSelector(".preview");
+  await p.tap("#pblock");
+  await p.waitForSelector(".kresults");
+  check(await p.evaluate(() => window.__DE_K.KS().probes[0].ok === 0) && /unterschätzt|eingeschätzt|Gut erkannt|mehr/.test(await p.textContent(".kresults")), "Alles leer: 0 richtig, freundliche Auswertung");
+  check(p.errors.length === 0, "Probe Mathe ohne Fehler " + p.errors.join("|"));
   await ctx.close();
 }
 
