@@ -269,7 +269,7 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   await openParents(p);
   check(await p.$('.ptabs [data-v="math"][aria-pressed="true"]'), "Eltern-Übersicht öffnet beim gewählten Fach");
   check((await p.$$(".x1 td")).length === 81, "1×1-Tabelle mit 81 Feldern");
-  check((await p.$$(".x1 td.bad")).length >= 1 && (await p.$$(".x1 td.good")).length >= 1, "Tabelle zeigt Fehler und Sicheres");
+  check((await p.$$(".x1 td.bad")).length >= 1 && (await p.$$(".x1 td.good, .x1 td.slow")).length >= 1, "Tabelle zeigt Fehler und richtig Beantwortetes");
   check((await p.textContent(".parents")).includes("Wackelt noch"), "Liste 'Wackelt noch'");
   await shot(p, "parents");
   await p.selectOption("#m-tn", "30");
