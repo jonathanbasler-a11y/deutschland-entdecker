@@ -427,6 +427,8 @@ for (const fach of ["de", "ma"]) {
   for (const t of await p.$$('[data-act="ptab"]')) if ((await t.textContent()).includes("Kompass")) await t.click();
   const ptxt2 = await p.textContent(".parents");
   check(ptxt2.includes("4 / 10 (40 %)") && ptxt2.includes("schätzt sich höher ein") && ptxt2.includes("Zahlen und Rechnen 3/5") && ptxt2.includes("(Original)"), "Eltern-Übersicht: Probe mit Einschätzung, Ergebnis und Bereichen");
+  check(!ptxt2.includes("Levi"), "Eltern-Übersicht: kein hardcodierter Kindname");
+  check(ptxt2.includes("Selbsteinschätzung wird vor der Probe gewählt"), "Eltern-Übersicht: generischer Hinweis zur Selbsteinschätzung");
   check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Eltern-Übersicht hochkant: kein seitliches Scrollen");
   await shot(p, "parents");
   check(p.errors.length === 0, "keine Konsolenfehler (Eltern) " + p.errors.join(" | "));

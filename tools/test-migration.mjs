@@ -35,6 +35,11 @@ const CASES = [
   ["leeres Objekt", {}],
   ["kein JSON", "{kaputt"],
   ["Zahl statt Objekt", 5],
+  // Stand nach PR18: Geschenk, Aufholbonus, eigene Tiergestalt, unbekanntes Zubehör, Kompass
+  ["Geschenk und Bonus", { ...OLD, gift: 5000, gift2: true, boost: { until: Date.now() + 3600000, mult: 3, extra: 200, last: 420 }, pet: { name: "Bello", kind: "panda", blocks: 2, bosses: {}, worn: ["krone"], acc: ["krone"] } }],
+  ["unbekanntes Zubehör in worn", { ...OLD, gift2: true, pet: { name: "Bello", kind: "tiger", blocks: 0, bosses: {}, worn: ["ghost-acc", "krone"], acc: ["krone"] } }],
+  ["boost ist eine Zahl", { ...OLD, gift2: true, boost: 3, pet: { name: "Bello", kind: "fuchs", blocks: 0, bosses: {} } }],
+  ["kompass halb", { ...OLD, gift2: true, subject: "kompass", kompass: { xp: 10 } }],
 ];
 
 for (const [name, data] of CASES) {
@@ -73,6 +78,24 @@ for (const [name, data] of CASES) {
     const S = await p.evaluate(() => window.__DE.S);
     check(S.xp === 420 && S.name === "Max" && S.missionsDone === 1 && S.blitzBest === 9 && S.badges.start && S.items.s_bw.choice === 2, "alter Stand: Punkte, Name, Abzeichen, Sterne bleiben");
     check(S.pet && S.pet.name === "Pixel" && S.bossOn !== false, "alter Stand: Hund bekommt Standardwerte");
+  }
+  if (name === "Geschenk und Bonus") {
+    const S = await p.evaluate(() => window.__DE.S);
+    check(S.gift === 5000 && S.gift2 === true && S.boost && S.boost.extra === 200 && S.pet.kind === "panda", "Geschenk/Bonus und Panda bleiben");
+    const xp = await p.evaluate(() => window.__DE.totalXp());
+    check(xp >= 5200, "Geschenk und Bonus zählen in totalXp (" + xp + ")");
+  }
+  if (name === "unbekanntes Zubehör in worn") {
+    // Anziehen eines anderen Teils darf mit ghost-acc nicht abstürzen
+    try {
+      await p.click('[data-act="home"]').catch(() => {});
+      await p.evaluate(() => { const pet = window.__DE.S.pet; pet.acc = ["krone", "brille"]; pet.worn = ["ghost-acc", "krone"]; pet.spent = 0; });
+      await p.click('[data-act="pet"]');
+      await p.waitForSelector(".petview", { timeout: 2000 });
+      await p.click('.snack[data-v="brille"]');
+      const worn = await p.evaluate(() => window.__DE.S.pet.worn || []);
+      check(worn.includes("brille") && !worn.includes("ghost-acc") && errs.length === 0, "unbekanntes Zubehör: Anziehen bereinigt ohne Absturz");
+    } catch (e) { check(false, "unbekanntes Zubehör: Bedienung (" + String(e).split("\n")[0] + ")"); }
   }
   await ctx.close();
 }
