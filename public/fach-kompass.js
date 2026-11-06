@@ -24,6 +24,7 @@
   }
   const stat = (id) => KS().comp[id] || (KS().comp[id] = { n: 0, ok: 0, recent: [], stars: 0 });
   const starsOf = (id) => (KS().comp[id] && KS().comp[id].stars) || 0;
+  const PLANT = ["🌰", "🌱", "🌷", "🌸"], PLANT_NAME = ["Samen", "Keimling", "Knospe", "Blume"];
   const starStr = (n) => "★".repeat(n) + "☆".repeat(3 - n);
   const areaStars = (areaId) => { const ids = K.compsOfArea(areaId); return ids.length ? ids.reduce((a, id) => a + starsOf(id), 0) / ids.length : 0; };
   const RANKS = [
@@ -92,7 +93,7 @@
   function areaList(fach) {
     return K.AREAS.filter((a) => a.fach === fach).map((a) => {
       const s = areaStars(a.id);
-      return `<button class="karea" data-act="k-area" data-v="${a.id}" ${a.ready ? "" : "disabled"}><span class="ico">${a.icon}</span><span class="kt"><b>${esc(a.name)}</b><small>${a.ready ? `${starStr(Math.floor(s))} · ${K.compsOfArea(a.id).length} Aufgabenarten` : "kommt bis Dienstag"}</small></span></button>`;
+      return `<button class="karea" data-act="k-area" data-v="${a.id}" ${a.ready ? "" : "disabled"}><span class="ico">${a.icon}</span><span class="kt"><b>${esc(a.name)}</b><small>${a.ready ? `${PLANT[Math.floor(s)]} ${PLANT_NAME[Math.floor(s)]} · ${K.compsOfArea(a.id).length} Aufgabenarten` : "kommt bald"}</small></span></button>`;
     }).join("");
   }
   function home() {
@@ -104,6 +105,7 @@
           <h2 style="margin-top:14px">Test-Tipps</h2><ul class="ktips"><li>Lies jede Frage zweimal.</li><li>Weißt du etwas nicht? Überspringen und später wiederkommen.</li><li>Am Ende alles noch einmal anschauen.</li></ul></section>
         <div class="right">
           ${todayCard()}
+          <button class="mode big" data-act="k-konner"><span class="ico">🌱</span><div><b>Mein Könnerblatt</b><br><span>Was ich schon kann und was ich noch übe</span></div></button>
           <section class="card"><h2>Deutsch</h2><div class="kareas">${areaList("de")}</div></section>
           <section class="card"><h2>Mathe</h2><div class="kareas">${areaList("ma")}</div></section>
         </div>
@@ -140,6 +142,22 @@
       return newRound("practice", K.unitTasks(pickId), { area: areaId, unit: pickId, label: K.COMP[pickId].name });
     }
     newRound("practice", K.buildRound(K.compsOfArea(areaId), TEST.kRoundLen || 6, statsMap(), seed(), 2), { area: areaId, label: a.name });
+  }
+
+  /* ================= Könnerblatt (wie in der Schule: Samen, Keimling, Knospe, Blume) ================= */
+  function startComp(id) {
+    const c = K.COMP[id];
+    if (!c) return;
+    newRound("practice", c.solo ? K.unitTasks(id) : K.buildRound([id], TEST.kRoundLen || 6, statsMap(), seed(), 2), { area: c.area, label: c.name });
+  }
+  function renderKonner() {
+    const todo = K.COMPS.filter((c) => stat(c.id).n > 0 && starsOf(c.id) <= 1).sort((a, b) => starsOf(a.id) - starsOf(b.id) || stat(a.id).ok / stat(a.id).n - stat(b.id).ok / stat(b.id).n).slice(0, 3);
+    const block = (fach, title) => `<section class="card konner"><h2>${title}</h2><div class="ktabwrap"><table class="ktab konnertab"><thead><tr><th>Ich kann …</th>${PLANT.map((p, i) => `<th title="${PLANT_NAME[i]}"><span class="pl">${p}</span><small>${PLANT_NAME[i]}</small></th>`).join("")}</tr></thead><tbody>${
+      K.AREAS.filter((a) => a.fach === fach).map((a) => `<tr class="area"><th colspan="5">${a.icon} ${esc(a.name)}</th></tr>${K.compsOfArea(a.id).map((id) => { const st = starsOf(id), n = stat(id).n; return `<tr><th>${esc(compName(id))}</th>${PLANT.map((p, i) => `<td class="${n && i === st ? "on" : ""}">${n && i === st ? p : ""}</td>`).join("")}</tr>`; }).join("")}`).join("")}</tbody></table></div></section>`;
+    app.innerHTML = `<div class="results konnerview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein Könnerblatt</h1></div>
+      <section class="card"><p>So wie in der Schule: Jede Aufgabenart wächst vom Samen 🌰 zur Blume 🌸. Je öfter du richtig löst, desto weiter wächst sie. Sterne gehen nicht wieder verloren.</p>
+        <h2>Das übe ich als Nächstes</h2>${todo.length ? `<div class="kareas">${todo.map((c) => `<button class="karea" data-act="k-comp" data-v="${c.id}"><span class="ico">${PLANT[starsOf(c.id)]}</span><span class="kt"><b>${esc(compName(c.id))}</b><small>Jetzt üben</small></span></button>`).join("")}</div>` : `<p class="muted">Noch nichts zu üben gefunden. Probiere einen Bereich aus, dann zeigt dir das Blatt, was noch wächst.</p>`}</section>
+      ${block("de", "Deutsch")}${block("ma", "Mathe")}</div>`;
   }
 
   /* ================= Spielbildschirm ================= */
@@ -181,7 +199,7 @@
       return finish();
     }
     const it = r.q[r.i], t = it.t;
-    r.cur = t; r.attempt = 0; r.lock = false; r.wait = false; r.input = ""; r.sel = t.type === "match" ? t.left.map(() => []) : []; r.order = []; r.selfStage = 0; r.selfText = ""; r.showSol = false;
+    r.cur = t; r.attempt = 0; r.lock = false; r.wait = false; r.input = ""; r.sel = t.type === "match" ? t.left.map(() => []) : []; r.order = []; r.selfStage = 0; r.selfText = ""; r.showSol = false; r.vals = t.type === "nums" ? t.fields.map(() => "") : []; r.fld = 0;
     $("#kcard").classList.remove("good", "badc");
     const ps = $("#kpass"), P = t.passage;
     if (ps) {
@@ -207,8 +225,12 @@
       return drawInput();
     }
     const lab = (o, i) => (t.figs ? `<span class="kfo">${t.figs[i]}</span><b>${esc(o)}</b>` : esc(o));
+    if (t.type === "nums") {
+      a.innerHTML = `<div class="knums${t.digit ? " digits" : ""}" role="group" aria-label="Eingabefelder">${t.fields.map((f, i) => `<button class="kfield${i === r.fld ? " cur" : ""}" data-act="k-field" data-v="${i}" aria-label="${esc(f.label)}"><small>${esc(f.label)}</small><b class="kfv" id="kfv${i}">${esc(r.vals[i] || "")}</b></button>`).join("")}</div>${numpad(false)}`;
+      return;
+    }
     if (t.type === "choice") {
-      a.innerHTML = `<div class="opts kopts">${t.opts.map((o, i) => `<button class="opt${t.figs ? " figopt" : ""}" data-act="k-opt" data-v="${i}">${lab(o, i)}</button>`).join("")}</div>`;
+      a.innerHTML = `<div class="opts kopts${t.opts.some((o) => o.length > 28) ? " long" : ""}">${t.opts.map((o, i) => `<button class="opt${t.figs ? " figopt" : ""}" data-act="k-opt" data-v="${i}">${lab(o, i)}</button>`).join("")}</div>`;
       return;
     }
     if (t.type === "grid") {
@@ -282,10 +304,34 @@
     el.textContent = r.input || "";
     el.classList.toggle("empty", !r.input);
   }
+  function drawNums() {
+    const r = KR, t = r.cur;
+    if (!t || t.type !== "nums") return;
+    t.fields.forEach((f, i) => {
+      const b = document.querySelector(`.kfield[data-v="${i}"]`), el = $("#kfv" + i);
+      if (b) b.classList.toggle("cur", i === r.fld && !r.lock);
+      if (el) el.textContent = r.vals[i] || "";
+    });
+  }
+  function keyNums(v) {
+    const r = KR, t = r.cur, last = t.fields.length - 1;
+    if (v === "del") {
+      if (!r.vals[r.fld] && r.fld > 0 && t.digit) r.fld--;
+      r.vals[r.fld] = (r.vals[r.fld] || "").slice(0, -1);
+    } else if (v === "ok") {
+      const empty = r.vals.findIndex((x) => !x);
+      if (empty >= 0) r.fld = empty; else return submit(r.vals.slice());
+    } else if (v === ",") return;
+    else if (t.digit) { r.vals[r.fld] = v; if (r.fld < last) r.fld++; }
+    else if ((r.vals[r.fld] || "").replace(/\D/g, "").length < 7) r.vals[r.fld] = K.fmt(+((r.vals[r.fld] || "") + v).replace(/\./g, ""));
+    document.querySelectorAll(".kfield").forEach((b) => b.classList.remove("bad"));
+    drawNums();
+  }
   function key(v) {
     const r = KR;
-    if (!r || r.done || core.view !== "k-game" || !r.cur || r.cur.type !== "num") return;
+    if (!r || r.done || core.view !== "k-game" || !r.cur || (r.cur.type !== "num" && r.cur.type !== "nums")) return;
     if (r.lock) { if (r.wait && v === "ok") next(); return; }
+    if (r.cur.type === "nums") return keyNums(v);
     if (v === "del") r.input = (r.input || "").slice(0, -1);
     else if (v === "ok") return r.input ? submit(r.input) : null;
     else if (v === "," && (!r.cur.dec || (r.input || "").includes(","))) return;
@@ -340,6 +386,7 @@
       fb("hint", `${it.boss ? "Der Boss blockt!" : res && res.caseOnly ? "Fast! Achte auf Groß- und Kleinschreibung." : "Nicht ganz."} 💡 ${esc(t.tip)}`);
       // Eingaben zurücksetzen, damit er es noch einmal versucht
       if (t.type === "num") { r.input = ""; setTimeout(drawInput, 500); const a = $("#mans"); if (a) a.classList.add("bad"); }
+      if (t.type === "nums") { r.vals = t.fields.map(() => ""); r.fld = 0; document.querySelectorAll(".kfield").forEach((b) => b.classList.add("bad")); setTimeout(() => { document.querySelectorAll(".kfield").forEach((b) => b.classList.remove("bad")); drawNums(); }, 600); }
       if (t.type === "choice") { const b = document.querySelector(`.kopts .opt[data-v="${r.lastOpt}"]`); if (b) { b.classList.add("bad"); b.disabled = true; } }
       if (t.type === "order") { r.order = []; drawAnswer(); }
       save(); updateBar();
@@ -356,7 +403,7 @@
     markSolution(false);
     fb(r.mode === "check" ? "hint" : "bad", `${r.mode === "check" ? "Das üben wir noch. " : ""}Lösung: <b>${esc(K.solution(t))}</b><small>${esc(t.explain)}${it.repeat || r.mode === "check" ? "" : " · Die Aufgabe kommt gleich noch einmal."}</small>`);
     // ein einziger Weiter-Knopf: bei Zahlen auf dem Ziffernblock, beim Schreiben im Formular, sonst darunter
-    if (t.type === "num") { const kok = $("#kok"); if (kok) { kok.textContent = "Weiter"; kok.id = "knx"; kok.classList.add("wide"); } }
+    if (t.type === "num" || t.type === "nums") { const kok = $("#kok"); if (kok) { kok.textContent = "Weiter"; kok.id = "knx"; kok.classList.add("wide"); } }
     else if (t.type === "write") { const s = $("#kws"); if (s) { s.textContent = "Weiter"; s.id = "knx"; } }
     else $("#kact").innerHTML = `<button class="btn" data-act="k-next" id="knx">Weiter</button>`;
     save(); updateBar();
@@ -373,6 +420,11 @@
     if (t.type === "cut") document.querySelectorAll(".kgap").forEach((b) => { b.disabled = true; const i = +b.dataset.v; b.classList.toggle("ok", t.ans.includes(i)); b.classList.toggle("bad", !t.ans.includes(i) && r.sel.includes(i)); });
     if (t.type === "self") { const ta = $("#kst"); if (ta) ta.disabled = true; }
     if (t.type === "grid") { r.showSol = true; drawAnswer(); }
+    if (t.type === "nums") t.fields.forEach((f, i) => {
+      const b = document.querySelector(`.kfield[data-v="${i}"]`), el = $("#kfv" + i), good = K.parseNum(r.vals[i]) === f.ans;
+      if (b) { b.classList.remove("cur", "bad"); b.classList.add(good ? "ok" : "sol"); }
+      if (el) el.textContent = t.digit ? String(f.ans) : K.fmt(f.ans);
+    });
     const go = $("#kgo"); if (go) go.remove();
   }
 
@@ -493,6 +545,8 @@
       case "k-check": startCheck(); break;
       case "k-mission": startMission(); break;
       case "k-area": startArea(v); break;
+      case "k-konner": go("k-konner"); break;
+      case "k-comp": startComp(v); break;
       case "k-key": key(v); break;
       case "k-opt": if (r && !r.lock && r.cur.type === "choice") { r.lastOpt = +v; submit(+v); } break;
       case "k-tog": if (r && !r.lock) { const i = +v; r.sel = r.sel.includes(i) ? r.sel.filter((x) => x !== i) : r.sel.concat(i); b.setAttribute("aria-pressed", String(r.sel.includes(i))); } break;
@@ -500,6 +554,7 @@
       case "k-unorder": if (r && !r.lock) { r.order.splice(+v, 1); drawAnswer(); } break;
       case "k-tf": if (r && !r.lock) { const [i, val] = v.split(":"); r.sel[+i] = val === "1"; drawAnswer(); } break;
       case "k-check-ans": if (r && !r.lock) { const t = r.cur; submit(t.type === "order" ? r.order : t.type === "tf" ? r.sel : r.sel); } break;
+      case "k-field": if (r && !r.lock) { r.fld = +v; drawNums(); } break;
       case "k-cell": if (r && !r.lock) {
         if (r.cur.bars) {
           // Balken: Tippen setzt die Höhe der Spalte auf dieses Kästchen (nochmal auf das oberste tippen löscht)
@@ -526,7 +581,7 @@
   }
   // echte Tastatur bei Zahlenaufgaben
   document.addEventListener("keydown", (e) => {
-    if (core.view !== "k-game" || !KR || !KR.cur || KR.cur.type !== "num") return;
+    if (core.view !== "k-game" || !KR || !KR.cur || (KR.cur.type !== "num" && KR.cur.type !== "nums")) return;
     if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     let v = null;
     if (/^[0-9]$/.test(e.key)) v = e.key;
@@ -544,7 +599,7 @@
     id: "kompass", prefix: "k-", name: "Kompass 4", icon: "🧭",
     home, act, badges,
     xp: () => (core.S.kompass && core.S.kompass.xp) || 0,
-    render(view) { if (view === "k-game") return drawGame(); if (view === "k-results") return renderResults(); go("home"); },
+    render(view) { if (view === "k-game") return drawGame(); if (view === "k-results") return renderResults(); if (view === "k-konner") return renderKonner(); go("home"); },
     activeOn: (k) => !!(core.S.kompass && core.S.kompass.days && core.S.kompass.days[k]),
     parents, bindParents,
   };

@@ -337,6 +337,16 @@
     // Kurzantwort: das Kind vergleicht selbst mit der Musterlösung (true/false)
     if (t.type === "self") return { ok: given === true };
     if (t.type === "tf") return { ok: Array.isArray(given) && t.rows.every((row, i) => given[i] === row.ok) };
+    // mehrere Zahlenfelder (z. B. Nachbar nach unten / nach oben, Stellenwerttafel Ziffer für Ziffer)
+    if (t.type === "nums") {
+      const g = given || [];
+      return { ok: t.fields.every((f, i) => { const v = parseNum(g[i]); return isFinite(v) && Math.abs(v - f.ans) < 0.005; }) };
+    }
+    if (t.type === "write" && t.words) {
+      // Zahlwörter: Groß/klein, Leerzeichen, Bindestriche egal; ß = ss
+      const nw = (x) => String(x || "").toLowerCase().replace(/ß/g, "ss").replace(/[\s.\-]/g, "");
+      return { ok: t.ans.some((a) => nw(a) === nw(given)) };
+    }
     if (t.type === "write") {
       const g = String(given || "").trim().replace(/\s+/g, " ");
       // streng: genau so (Groß/klein zählt); sonst Groß/klein am Wortanfang egal
@@ -353,6 +363,7 @@
     if (t.type === "pick") return t.ans.map((i) => t.tokens[i]).join(", ");
     if (t.type === "order") return t.items.join(" → ");
     if (t.type === "match") return t.left.map((l, i) => `${l} ${t.ans[i].length ? t.ans[i].map((j) => t.right[j]).join(" / ") : "(nichts)"}`).join(" · ");
+    if (t.type === "nums") return t.digit ? t.fields.map((f) => f.ans).join(" ") : t.fields.map((f) => `${f.label}: ${fmt(f.ans)}`).join(" · ");
     if (t.type === "grid") return t.solText || "siehe Markierung";
     if (t.type === "cut") return t.tokens.map((w, i) => w + (t.ans.includes(i) ? " |" : "")).join(" ");
     if (t.type === "self") return t.model;
@@ -376,13 +387,15 @@
     const last = st.recent && st.recent.length ? st.recent[st.recent.length - 1] : 1;
     return 1 + (3 - (st.stars || 0)) * 1.5 + (last ? 0 : 3);
   }
+  // Schwerpunkte nach der Mathe-LZK vom 22.10.2026 (Zahlraum): kommen etwas öfter dran
+  const FOCUS = new Set(["ma.nachbarstelle", "ma.nachbarwahl", "ma.strahllesen", "ma.plaettchen", "ma.tafelwort"]);
   // n Aufgaben aus den erlaubten Unterkompetenzen, schwache öfter; seeds fortlaufend
   function buildRound(compIds, n, stats, seed, lv) {
     const r = rng(seed);
     const ids = compIds.filter((id) => COMP[id]);
     const out = [], used = {};
     for (let i = 0; i < n && ids.length; i++) {
-      const w = ids.map((id) => weight(stats[id]) / (1 + (used[id] || 0) * 1.5));
+      const w = ids.map((id) => (weight(stats[id]) * (FOCUS.has(id) ? 1.8 : 1)) / (1 + (used[id] || 0) * 1.5));
       const total = w.reduce((a, b) => a + b, 0);
       let x = r() * total, k = 0;
       for (; k < ids.length - 1; k++) { x -= w[k]; if (x <= 0) break; }

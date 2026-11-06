@@ -66,8 +66,8 @@ const setM = (p, obj) => p.evaluate((o) => Object.assign(window.__DE_M.M().set, 
   await p.reload();
   check(await p.$(".mhome"), "Fach bleibt nach Neuladen gewählt");
   check((await p.$$(".rung:not([disabled])")).length === 1, "Zu Beginn ist nur Stufe 1 offen");
-  check((await p.$$(".rung")).length === 9, "9 Stufen im Turm (4 Teststufen + 5 Extras)");
-  check((await p.$$(".rung .tag")).length === 5 && !!(await p.$(".ladder-sep")), "Extra-Stufen sind markiert und abgesetzt");
+  check((await p.$$(".rung")).length === 10, "10 Stufen im Turm (4 Teststufen + 6 Extras)");
+  check((await p.$$(".rung .tag")).length === 6 && !!(await p.$(".ladder-sep")), "Extra-Stufen sind markiert und abgesetzt");
   check((await p.$$eval(".rung", (r) => r.slice(-4).map((x) => x.dataset.v).join(","))) === "stelle,z-mal,k-geteilt,k-mal", "Testpfad unten: 1×1 mal, 1×1 geteilt, Zehner/Hunderter, große Zahlen");
   await shot(p, "home");
   await p.tap('[data-act="m-level"][data-v="k-mal"]');

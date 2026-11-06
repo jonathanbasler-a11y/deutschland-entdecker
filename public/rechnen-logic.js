@@ -16,6 +16,7 @@
     { id: "h", name: "Mit Hundertern", short: "Hunderter", ex: "7 · 900, 6300 : 9", extra: true },
     { id: "zz", name: "Zehner mal Zehner", short: "Zehner · Zehner", ex: "70 · 90, 6300 : 70", extra: true },
     { id: "gross", name: "11er bis 19er", short: "11er bis 19er", ex: "13 · 7, 91 : 13", extra: true },
+    { id: "zv", name: "Zahl verändern", short: "Zahl verändern", ex: "483.094 + 1.000, 540.300 − 100", extra: true },
   ];
   const LEVEL = Object.fromEntries(LEVELS.map((l, i) => [l.id, Object.assign({ n: i + 1 }, l)]));
   const MAX_GROSS = 999;
@@ -29,7 +30,7 @@
   // Die 1×1-Aufgabe dahinter (für die Eltern-Tabelle), z. B. 640 : 80 -> 8×8. Sonst null.
   function coreOf(level, a, op, b, ans) {
     let x, y;
-    if (level === "null" || level === "gross" || level === "stelle") return null;
+    if (level === "null" || level === "gross" || level === "stelle" || level === "zv") return null;
     if (op === "·") { x = a; y = b; } else { x = b; y = ans; }
     if (level !== "k-mal" && level !== "k-geteilt") { x /= pow(tz(x)); y /= pow(tz(y)); }
     if (x < 2 || y < 2 || x > 10 || y > 10) return null;
@@ -37,12 +38,12 @@
   }
 
   function task(level, a, op, b) {
-    const ans = op === "·" ? a * b : op === "+" ? a + b : a / b;
+    const ans = op === "·" ? a * b : op === "+" ? a + b : op === "−" ? a - b : a / b;
     return { level, a, op, b, ans, key: level + "|" + a + op + b, core: coreOf(level, a, op, b, ans) };
   }
   // "z-geteilt|640:80" -> Aufgabe
   function fromKey(key) {
-    const m = /^([a-z-]+)\|(\d+)([·:+])(\d+)$/.exec(key);
+    const m = /^([a-z-]+)\|(\d+)([·:+−])(\d+)$/.exec(key);
     return m && LEVEL[m[1]] ? task(m[1], +m[2], m[3], +m[4]) : null;
   }
 
@@ -77,6 +78,13 @@
       if (r() < 0.4) { const n = ri(r, 1000, 99999); return r() < 0.5 ? task("stelle", 1, "·", n) : task("stelle", n, "·", 1); }
       const p = ri(r, 3, 5), q = ri(r, 1, p - 1), a = ri(r, 1, 9) * pow(p), b = ri(r, 1, 9) * pow(q);
       return r() < 0.75 ? task("stelle", a, "+", b) : task("stelle", b, "+", a);
+    },
+    // Zahl verändern wie im Plättchen-Spiel: ±10, ±100, ±1.000 ... an einer Stelle, ohne Übertrag
+    zv: (r) => {
+      for (;;) {
+        const n = ri(r, 10000, 999999), k = ri(r, 1, 5), p = pow(k), d = Math.floor(n / p) % 10, plus = r() < 0.55;
+        if (plus ? d < 9 : d > 0) return task("zv", n, plus ? "+" : "−", p);
+      }
     },
     "z-geteilt": (r) => { const a = ri(r, 2, 9), b = ri(r, 2, 9), p = a * b * 10; return r() < 0.5 ? task("z-geteilt", p, ":", a) : task("z-geteilt", p, ":", b * 10); },
     h: (r) => {
@@ -145,15 +153,19 @@
   // Tausenderpunkte wie auf dem Arbeitsblatt (ab 10.000): 57.543, 200.000
   // (bei den Stellenwert-Aufgaben schon ab 1.000, damit beide Zahlen gleich aussehen)
   const fmt = (n, from) => (Math.abs(n) >= (from || 10000) ? String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".") : String(n));
-  const fmtT = (t, n) => fmt(n, t.level === "stelle" ? 1000 : 10000);
+  const fmtT = (t, n) => fmt(n, t.level === "stelle" || t.level === "zv" ? 1000 : 10000);
   const show = (t) => fmtT(t, t.a) + " " + t.op + " " + fmtT(t, t.b);
-  const speech = (t) => t.a + (t.op === "·" ? " mal " : t.op === "+" ? " plus " : " geteilt durch ") + t.b;
+  const speech = (t) => t.a + (t.op === "·" ? " mal " : t.op === "+" ? " plus " : t.op === "−" ? " minus " : " geteilt durch ") + t.b;
   const PLACE = ["Einer", "Zehner", "Hunderter", "Tausender", "Zehntausender", "Hunderttausender"];
   const nullen = (z) => (z === 1 ? "eine Null" : z === 2 ? "zwei Nullen" : z + " Nullen");
 
   // Rechentrick: tip verrät das Ergebnis nicht, explain zeigt den ganzen Weg.
   function help(t) {
     const { a, b, ans } = t;
+    if (t.level === "zv") {
+      const k = String(b).length - 1, name = PLACE[k];
+      return { tip: `Nur die ${name}stelle ändert sich: Dort kommt ${t.op === "+" ? "eins dazu" : "eins weg"}. Alle anderen Stellen bleiben gleich.`, explain: `Nur die ${name}stelle wird um 1 ${t.op === "+" ? "größer" : "kleiner"}: ${fmtT(t, a)} ${t.op} ${fmtT(t, b)} = ${fmtT(t, ans)}` };
+    }
     if (t.op === "+") {
       const pa = PLACE[String(a).length - 1] || "", pb = PLACE[String(b).length - 1] || "";
       return { tip: `Schau auf die Stellen: ${pa} und ${pb}. Jede Zahl steht an einer anderen Stelle.`, explain: `${fmtT(t, a)} + ${fmtT(t, b)} = ${fmtT(t, ans)}` };
