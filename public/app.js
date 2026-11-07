@@ -3,6 +3,7 @@
   const { judge, judgeAll, judgeEach, splitAnswers, judgeNumber, gradeFor, sample, shuffle, diffMark, closest, genOthers } = DELogic;
   const B = window.DEBegleiter;
   const app = document.getElementById("app");
+  // KEY nie umbenennen: sonst gehen alle Spielstände verloren. Neue Felder nur additiv in defaults().
   const KEY = "deutschland-entdecker-v1";
   const TEST = window.__DE_TEST || {};
 
@@ -34,17 +35,24 @@
     b.last = raw;
   }
   const boostLeft = () => (S.boost && Date.now() <= S.boost.until ? S.boost.until - Date.now() : 0);
+  let skipSave = false; // z. B. kurz vor Neuladen nach Sicherung laden — sonst überschreibt pagehide den neuen Stand
   const save = () => {
+    if (skipSave) return;
     let t;
     try { accrue(); } catch (e) { /* vor dem Start egal */ }
     try { t = JSON.stringify(S); localStorage.setItem(KEY, t); localStorage.setItem(BAK, t); } catch (e) { /* egal */ }
     if (t) idb((db) => db.transaction("s", "readwrite").objectStore("s").put(t, "state"));
   };
+  // Vor Tab-Wechsel / App-Schließen noch einmal sichern (Update oder Safari darf den Tab einfrieren)
+  try {
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") save(); });
+    window.addEventListener("pagehide", save);
+  } catch (e) { /* egal */ }
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* egal */ }
   // Kein lesbarer Stand in localStorage (fehlt oder kaputt), aber IndexedDB hat noch einen: wiederherstellen.
   // Flag nur gegen Endlos-Neuladen; nach erfolgreichem Lesen wird es wieder gelöscht (siehe oben).
   if (!primary && !bak && !sessionStorage.getItem("de-restored")) {
-    idb((db) => { const g = db.transaction("s").objectStore("s").get("state"); g.onsuccess = () => { if (g.result) { try { localStorage.setItem(KEY, g.result); localStorage.setItem(BAK, g.result); sessionStorage.setItem("de-restored", "1"); location.reload(); } catch (e) { /* egal */ } } }; });
+    idb((db) => { const g = db.transaction("s").objectStore("s").get("state"); g.onsuccess = () => { if (g.result) { try { skipSave = true; localStorage.setItem(KEY, g.result); localStorage.setItem(BAK, g.result); sessionStorage.setItem("de-restored", "1"); location.reload(); } catch (e) { skipSave = false; } } }; });
   }
   // Sicherungsdatei laden und speichern
   const backupDownload = () => {
@@ -55,8 +63,15 @@
   const backupLoad = (file) => {
     const fr = new FileReader();
     fr.onload = () => {
-      try { const o = JSON.parse(fr.result); if (!o || typeof o !== "object" || Array.isArray(o) || !("xp" in o || "pet" in o || "kompass" in o)) throw new Error("kein Spielstand"); localStorage.setItem(KEY, JSON.stringify(o)); localStorage.setItem(BAK, JSON.stringify(o)); location.reload(); }
-      catch (e) { toast("Diese Datei ist keine Sicherung."); }
+      try {
+        const o = JSON.parse(fr.result);
+        if (!o || typeof o !== "object" || Array.isArray(o) || !("xp" in o || "pet" in o || "kompass" in o)) throw new Error("kein Spielstand");
+        const t = JSON.stringify(o);
+        skipSave = true;
+        localStorage.setItem(KEY, t); localStorage.setItem(BAK, t);
+        idb((db) => db.transaction("s", "readwrite").objectStore("s").put(t, "state"));
+        location.reload();
+      } catch (e) { skipSave = false; toast("Diese Datei ist keine Sicherung."); }
     };
     fr.readAsText(file);
   };
@@ -372,7 +387,7 @@
     app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein ${esc(K.word)}</h1></div>
       <section class="card petstage">
         <div class="room" style="background:${B.roomOf(p.room).bg}">
-        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind, p.worn)}${(p.kind && p.kind !== "hund" ? [] : p.worn || []).map((id) => { const a = B.ACC.find((x) => x.id === id); return a ?`<span class="acc acc-${a.slot}" aria-hidden="true">${a.icon}</span>` : ""; }).join("")}</button>
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind)}${(p.worn || []).map((id) => { const a = B.ACC.find((x) => x.id === id); return a ? `<span class="acc acc-${a.slot}" aria-hidden="true">${a.icon}</span>` : ""; }).join("")}</button>
         <div class="decor" aria-hidden="true">${(p.decor || []).map((id) => { const d = B.DECOR.find((x) => x.id === id); return d ? `<span>${d.icon}</span>` : ""; }).join("")}</div></div>
         <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
           <div class="pbar big"><i style="width:${g.pct}%"></i></div>
@@ -623,7 +638,7 @@
     const m = document.createElement("div");
     m.className = "modal";
     m.innerHTML = `<div class="card"><h1>Willkommen!</h1><p>Wie heißt du? Der Name bleibt nur auf diesem iPad.</p><input type="text" id="nm" placeholder="Dein Vorname" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20">
-      <div class="dogrow">${B.dog(0, "happy")}<label for="dn">Das ist dein Hund. Er wächst, wenn du übst. Wie soll er heißen?</label></div>
+      <div class="dogrow">${B.dog(0, "happy", "", pet().kind || "hund")}<label for="dn">Das ist dein Begleiter. Er wächst, wenn du übst. Wie soll er heißen?</label></div>
       <input type="text" id="dn" value="${esc(pet().name)}" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="14" aria-label="Name des Tiers">
       <div class="row"><button class="btn" data-act="savename">Los geht's</button><button class="btn ghost" data-act="skipname">Überspringen</button></div></div>`;
     document.body.appendChild(m);
@@ -1692,7 +1707,10 @@
   if (S.subject !== "de" && !fachOf(S.subject)) S.subject = "de";
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.__DE = { get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp };
+  window.__DE = {
+    get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp, save, KEY,
+    get skipSave() { return skipSave; }, set skipSave(v) { skipSave = !!v; },
+  };
   // Einmaliges Geschenk nach dem verlorenen Spielstand: 5000 Punkte und 24 Stunden dreifache Punkte zum Aufholen
   if (!S.gift2 && (!window.__DE_TEST || TEST.gift)) {
     S.gift = (S.gift || 0) + 5000; S.gift2 = true;

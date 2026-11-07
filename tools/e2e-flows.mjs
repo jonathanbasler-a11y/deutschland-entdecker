@@ -134,11 +134,13 @@ async function playRound(p, max = 40) {
   const { ctx, p } = await fresh("2026-11-08T10:00:00");
   await p.click('[data-act="skipname"]');
   await p.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem("deutschland-entdecker-v1"));
-    s.days = { "2026-11-06": 5, "2026-11-07": 8 };
-    localStorage.setItem("deutschland-entdecker-v1", JSON.stringify(s));
+    window.__DE.S.days = { "2026-11-06": 5, "2026-11-07": 8 };
+    window.__DE.save();
+    window.__DE.skipSave = true; // pagehide beim Neuladen soll den Stand nicht überschreiben
   });
+  await p.clock.setFixedTime(new Date("2026-11-08T10:00:00"));
   await p.reload();
+  await p.waitForSelector(".chips");
   check((await p.textContent(".chips")).includes("🔥 2"), "Serie 2 (gestern + vorgestern, heute noch nicht)");
   await p.click("#more > summary");
   await p.click('[data-act="topic"][data-v="states"]');
