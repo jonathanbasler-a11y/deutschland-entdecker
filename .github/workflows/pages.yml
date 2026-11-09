@@ -55,6 +55,8 @@ jobs:
         run: node tools/e2e-devices.mjs chromium
       - name: Offline
         run: node tools/test-offline.mjs
+      - name: Version und Cache
+        run: node tools/test-version.mjs
   deploy:
     needs: test
     if: github.event_name != 'pull_request'

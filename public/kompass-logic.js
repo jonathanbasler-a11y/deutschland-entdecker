@@ -412,27 +412,31 @@
     { day: "2026-11-06", kind: "check", title: "Startcheck", text: "Deutsch und Mathe, je 8 Aufgaben. Wir schauen, was du schon kannst." },
     { day: "2026-11-07", kind: "mini", title: "Kurze Etappe", text: "Eine Etappe mit 6 Aufgaben, ca. 8 Minuten." },
     { day: "2026-11-08", kind: "mini", title: "Kurze Etappe", text: "Eine Etappe mit 6 Aufgaben, ca. 8 Minuten." },
-    { day: "2026-11-09", kind: "mini", title: "Kurze Etappe", text: "Eine Etappe mit 6 Aufgaben. Morgen ist die LZK, viel Glück!" },
+    { day: "2026-11-09", kind: "full", min: 21, title: "Aufholtag", text: "3 Etappen, ca. 21 Minuten. Du holst heute richtig auf. Morgen ist die LZK, danach geht es hier weiter." },
     { day: "2026-11-10", kind: "lzk", title: "LZK-Tag", text: "Heute ist die LZK. Kompass hat Pause. Wenn du magst: eine freiwillige Mut-Runde." },
-    { day: "2026-11-11", kind: "full", title: "Training", text: "3 Etappen mit Bewegungspause, ca. 20 Minuten." },
-    { day: "2026-11-12", kind: "full", title: "Training", text: "3 Etappen mit Bewegungspause, ca. 20 Minuten." },
-    { day: "2026-11-13", kind: "full", title: "Training", text: "3 Etappen mit Bewegungspause, ca. 20 Minuten." },
-    { day: "2026-11-14", kind: "full", title: "Training", text: "3 Etappen mit Bewegungspause, ca. 20 Minuten." },
-    { day: "2026-11-15", kind: "probe-de", title: "Probe-Kompass Deutsch", text: "Wie der echte Test, in 3 Blöcken mit Pausen." },
-    { day: "2026-11-16", kind: "probe-ma", title: "Probe-Kompass Mathe", text: "Wie der echte Test, in 3 Blöcken mit Pausen." },
+    { day: "2026-11-11", kind: "full", min: 21, title: "Training", text: "3 Etappen mit Bewegungspause, ca. 21 Minuten." },
+    { day: "2026-11-12", kind: "full", min: 28, title: "Training", text: "4 Etappen mit Bewegungspause, ca. 28 Minuten. Du wirst jeden Tag länger fit." },
+    { day: "2026-11-13", kind: "full", min: 35, title: "Training", text: "5 Etappen mit Bewegungspause, ca. 35 Minuten." },
+    { day: "2026-11-14", kind: "full", min: 42, title: "Training", text: "6 Etappen mit Bewegungspause, ca. 42 Minuten. Fast so lang wie der Test!" },
+    { day: "2026-11-15", kind: "probe-de", title: "Probe-Kompass Deutsch", text: "Wie der echte Test: 3 Teile, zusammen 45 Minuten, mit Pausen." },
+    { day: "2026-11-16", kind: "probe-ma", title: "Probe-Kompass Mathe", text: "Wie der echte Test: 3 Teile, zusammen 45 Minuten, mit Pausen." },
     { day: "2026-11-17", kind: "mut", title: "Mut-Tag", text: "Nur Lieblingsaufgaben und Test-Tipps. Nichts Neues." },
     { day: "2026-11-18", kind: "warm", title: "Kompass Deutsch", text: "5 Minuten Aufwärmen. Du schaffst das!" },
     { day: "2026-11-19", kind: "warm", title: "Kompass Mathe", text: "5 Minuten Aufwärmen. Du schaffst das!" },
   ];
   const planFor = (day) => PLAN.find((p) => p.day === day) || null;
   // Etappen des Tages: [Bereich-Auswahl, Name]
-  function etappen(kind) {
+  function etappen(kind, min) {
     if (kind === "mini") return [{ name: "Etappe", areas: ["de", "ma"], n: 6 }];
-    if (kind === "full") return [{ name: "Deutsch", areas: ["de"], n: 6 }, { name: "Mathe", areas: ["ma"], n: 6 }, { name: "Gemischt", areas: ["de", "ma"], n: 6 }];
+    if (kind === "full") {
+      // pro Etappe ca. 7 Minuten: so wächst die Übungszeit von Tag zu Tag bis zur Testlänge
+      const cnt = Math.max(3, Math.min(7, Math.round((min || 21) / 7))), base = [{ name: "Deutsch", areas: ["de"] }, { name: "Mathe", areas: ["ma"] }, { name: "Gemischt", areas: ["de", "ma"] }];
+      return Array.from({ length: cnt }, (_, i) => Object.assign({}, base[i % 3], { n: 6, name: base[i % 3].name + (i >= 3 ? " " + (Math.floor(i / 3) + 1) : "") }));
+    }
     if (kind === "lzk" || kind === "mut") return [{ name: "Mut-Runde", areas: ["de", "ma"], n: 5, easy: true }];
     if (kind === "warm") return [{ name: "Aufwärmen", areas: ["de", "ma"], n: 4, easy: true }];
-    // Proben (kommen noch): bis dahin wie ein Training
-    return [{ name: "Deutsch", areas: ["de"], n: 6 }, { name: "Mathe", areas: ["ma"], n: 6 }, { name: "Gemischt", areas: ["de", "ma"], n: 6 }];
+    // Proben: wie ein Training mit 3 Etappen
+    return etappen("full", 21);
   }
   // Lesetexte (solo) laufen nur als eigene Leseeinheit, nicht in den gemischten Etappen
   const compsOf = (fach) => COMPS.filter((c) => { const a = AREAS.find((x) => x.id === c.area); return a && a.ready && !c.solo && (!fach || a.fach === fach); }).map((c) => c.id);

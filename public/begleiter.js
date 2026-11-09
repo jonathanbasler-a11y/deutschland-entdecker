@@ -284,6 +284,26 @@
     return { stage: i, name: stageName(i, kind), next: nx ? stageName(i + 1, kind) : null, need: nx ? nx.xp - xp : 0, pct: nx ? Math.round(((xp - cur.xp) / (nx.xp - cur.xp)) * 100) : 100 };
   }
   const gearOf = (xp) => GEAR.filter((g) => xp >= g.xp).map((g) => g.id);
+  // Kopfmaße je Tier in Pixel-Einheiten: Mitte (cx), Oberkante (top), Breite (w), Augenhöhe (ey), Kinn (chin).
+  // Zubehör wird daran ausgerichtet und mit der Kopfbreite skaliert.
+  const HEAD = {
+    hund: { cx: 18, top: 2, w: 9, ey: 4, chin: 9 }, fuchs: { cx: 20, top: 3, w: 7, ey: 5, chin: 10 },
+    katze: { cx: 19, top: 2, w: 8, ey: 6, chin: 10 }, panda: { cx: 18, top: 1, w: 9, ey: 5, chin: 9 },
+    wolf: { cx: 19.5, top: 2, w: 8, ey: 4, chin: 10 }, tiger: { cx: 20, top: 2, w: 8, ey: 4.5, chin: 10 },
+    drache: { cx: 21, top: 2, w: 8, ey: 4, chin: 9 }, einhorn: { cx: 20, top: 3, w: 8, ey: 5, chin: 10 },
+    pinguin: { cx: 8, top: 1, w: 8, ey: 3.5, chin: 7 }, eule: { cx: 9, top: 1.5, w: 9, ey: 5, chin: 8 },
+    hase: { cx: 16, top: 4, w: 6, ey: 6, chin: 10 }, koala: { cx: 10, top: 2, w: 9, ey: 5.5, chin: 9 },
+    dino: { cx: 20, top: 1, w: 7, ey: 2.5, chin: 6 },
+  };
+  // Emoji an die Stelle "slot" des Kopfes H setzen; Größe richtet sich nach der Kopfbreite
+  function at(H, slot, icon) {
+    const g = (x, y, size) => `<text x="${x}" y="${y}" font-size="${size}" text-anchor="middle">${icon}</text>`;
+    if (slot === "head") { const z = H.w * 0.78; return g(H.cx, H.top + 1.2 - 0.14 * z, z); }
+    if (slot === "eyes") { const z = H.w * 0.66; return g(H.cx, H.ey + 0.6 + 0.33 * z, z); }
+    if (slot === "neck") { const z = H.w * 0.42; return g(H.cx, H.chin + 0.3 + 0.33 * z, z); }
+    const z = H.w * 0.95; // Kopfhörer: um den Kopf, Mitte auf Augenhöhe
+    return g(H.cx, H.ey + 0.2 + 0.33 * z, z);
+  }
   // Tier als SVG. Zwei Bilder für Schwanz und Beine, die CSS abwechselt (wedeln, laufen).
   function dog(xp, cls, label, kind, worn) {
     const gear = gearOf(xp), K = kindOf(kind), pal = Object.assign({}, PAL, K.pal), sh = shapeOf(K.id);
@@ -299,20 +319,21 @@
       if (gear.includes("cape")) s += R(DOG.cape);
       if (gear.includes("scarf")) s += R(DOG.scarf);
       if (gear.includes("cape")) s += R(DOG.medal);
-      if (gear.includes("helm")) s += R(DOG.helm);
+      if (gear.includes("helm") && !on("head")) s += R(DOG.helm);
     } else {
-      // Ausrüstung am Kopf (Emoji), weil die Pixel-Formen unterschiedlich sind
-      const hx = sh.w - 3, hy = 4;
-      if (gear.includes("scarf") && !on("neck")) s += ic("🧣", hx - 2, hy + 7, 4);
-      if (gear.includes("helm") && !on("head")) s += ic("⛑️", hx, hy, 4);
-      if (gear.includes("cape")) s += ic("🏅", hx + 1, hy + 6, 3);
+      // Ausrüstung (Schal, Helm, Medaille) am Kopf des jeweiligen Tiers
+      const H = HEAD[K.id];
+      if (gear.includes("scarf") && !on("neck")) s += at(H, "neck", "🧣");
+      if (gear.includes("helm") && !on("head")) s += at(H, "head", "⛑️");
+      if (gear.includes("cape")) s += ic("🏅", H.cx + H.w * 0.45, H.chin + 2.2, H.w * 0.45);
     }
-    // Gekauftes Zubehör (für große und kleine Ansicht, falls kein HTML-Overlay)
-    for (const slot of ["ear", "head", "eyes", "neck"]) {
+    // Gekauftes Zubehör sitzt am Kopf des jeweiligen Tiers (Größe und Lage aus HEAD)
+    const H2 = HEAD[K.id];
+    for (const slot of ["ear", "eyes", "neck", "head"]) {
       const it = on(slot);
-      if (it) s += ic(it.icon, sh.w - (slot === "neck" ? 5 : 3), slot === "neck" ? 10 : slot === "eyes" ? 5 : 2, 4);
+      if (it) s += at(H2, slot, it.icon);
     }
-    return `<svg class="dog k-${K.id} st${stageOf(xp)} ${cls || ""}" viewBox="0 -2 ${sh.w} ${sh.h + 2}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${s}</svg>`;
+    return `<svg class="dog k-${K.id} st${stageOf(xp)} ${cls || ""}" viewBox="0 -7 ${sh.w} ${sh.h + 7}" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${s}</svg>`;
   }
   const torch = () => svg(4, 9, rects([[1, 3, 2, 6, "o"], [1, 4, 2, 5, "e"], [0, 0, 4, 4, "f"], [1, 1, 2, 2, "y"], [1, 0, 1, 1, "y"]]), "torch");
 

@@ -402,6 +402,30 @@ for (const fach of ["de", "ma"]) {
   await ctx.close();
 }
 
+// 3f) Wachsende Übungszeit, Tagesziel-Balken, unbegrenzte Bonus-Etappen, Versionsanzeige
+{
+  const { ctx, p } = await fresh("2026-11-12", undefined, { kRoundLen: 3 });
+  check((await p.textContent("#ver")).startsWith("Version "), "Versionsnummer oben sichtbar: " + (await p.textContent("#ver")));
+  check(/von 28 Min/.test(await p.textContent(".gtime")), "Tagesziel 28 Minuten am 12.11. sichtbar");
+  check(await p.locator(".mission .path li").count() === 5, "12.11.: 4 Etappen und Ziel im Pfad (wächst von Tag zu Tag)");
+  check(/Heute geht es los|Stück für Stück|Ziel erreicht/.test(await p.textContent(".gtime")), "aufmunternder Satz beim Zeitbalken");
+  await p.evaluate(() => { const k = window.__DE_K.KS(); k.done["2026-11-12"] = true; });
+  await p.click('[data-act="home"]').catch(() => {});
+  await p.evaluate(() => document.querySelector('[data-act="subject"][data-v="kompass"]').click());
+  check(await p.locator('[data-act="k-bonus"]').count() >= 1, "Bonus-Etappe wird nach dem Tagesziel angeboten");
+  const x0 = await p.evaluate(() => window.__DE_K.KS().xp);
+  await p.click('[data-act="k-bonus"]');
+  await playRound(p);
+  await p.waitForSelector(".kresults");
+  check(/Bonus-Etappe geschafft/.test(await p.textContent(".kresults")) && await p.locator('.kresults [data-act="k-bonus"]').count() === 1, "Bonus-Etappe: Ergebnis mit Knopf für noch eine (unbegrenzt)");
+  check(await p.evaluate((x0) => window.__DE_K.KS().bonus === 1 && window.__DE_K.KS().xp >= x0 + 30, x0), "Bonus-Etappe zählt und gibt Extra-Punkte");
+  await p.click('.kresults [data-act="k-bonus"]');
+  await playRound(p);
+  check(await p.evaluate(() => window.__DE_K.KS().bonus === 2), "Zweite Bonus-Etappe geht auch");
+  check(p.errors.length === 0, "Bonus ohne Fehler " + p.errors.join("|"));
+  await ctx.close();
+}
+
 // 4) Eltern-Übersicht und Hochformat
 {
   const { ctx, p } = await fresh("2026-11-07", { width: 820, height: 1180 });
