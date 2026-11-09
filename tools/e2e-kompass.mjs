@@ -451,7 +451,7 @@ for (const fach of ["de", "ma"]) {
   await p.waitForSelector(".merk");
   check(/Dicke Mäuse/.test(await p.textContent(".merk")), "Eselsbrücke für schriftliches Teilen: Dicke Mäuse suchen Beeren");
   await p.click('.merk [data-act="k-mdn"]');
-  check(await p.evaluate(() => window.__DE_K.KS().merk.vote["ma.geteilt:0"] === -1) && /Noch keine/.test(await p.textContent(".merk")), "👎 blendet den Vorschlag aus");
+  check(await p.evaluate(() => window.__DE_K.KS().merk.vote["ma.geteilt:0"] === -1) && !/Dicke Mäuse/.test(await p.textContent(".merk")) && /Probe: Ergebnis/.test(await p.textContent(".merk")), "👎 blendet den Vorschlag aus, die nächste Eselsbrücke kommt");
   await p.reload(); await p.waitForSelector("#ver");
   check(await p.evaluate(() => window.__DE.S.kompass.merk.my["ma.runden"].includes("5 geht hoch") && window.__DE.S.kompass.merk.vote["ma.geteilt:0"] === -1), "Eselsbrücken überstehen Neuladen");
   check(p.errors.length === 0, "Eselsbrücken ohne Fehler " + p.errors.join("|"));
