@@ -7,7 +7,7 @@ description: Aufgaben, Proben, Eselsbrücken und Texte für die Kompass-4-Übung
 
 ## Aufbau (Dateien in `public/`)
 - `kompass-logic.js`: Zufall mit Startwert, Aufgabenformen, `check`, `solution`, `buildRound`, `PLAN`, `etappen`.
-- Inhalte: `kompass-data.js` (Deutsch-Bank), `kompass-text.js` (Lesetexte, Rechtschreibung), `kompass-geo.js`, `kompass-mathe2.js`, `kompass-zahlraum.js` (Generatoren), `kompass-original.js` (IBBW-Originale 2025), `kompass-merk.js` (Eselsbrücken).
+- Inhalte: `kompass-data.js` (Deutsch-Bank), `kompass-text.js` (Lesetexte, Rechtschreibung), `kompass-geo.js`, `kompass-mathe2.js`, `kompass-zahlraum.js` (Generatoren), `kompass-original.js` (IBBW-Originale 2025), `kompass-begriffe.js` (Fachbegriffe und Wörterbuch nach dem Lehrer-Arbeitsblatt), `kompass-merk.js` (Eselsbrücken).
 - Oberfläche: `fach-kompass.js`. Neue Datei: in `index.html` **vor** `fach-kompass.js`, in `sw.js` `FILES`, und per `req(...)` in `tools/test-kompass.mjs`.
 - Aufgabentypen: num, nums, choice, multi, pick, order, tf, write, match, cut, self, grid. Optional `passage`, `fig` (SVG), `table`, `tip`, `explain`, `say`.
 
@@ -20,6 +20,7 @@ description: Aufgaben, Proben, Eselsbrücken und Texte für die Kompass-4-Übung
 
 ## Quellen und Urheberrecht
 - **Nur IBBW-Originale** (Kompass 4 Haupttermin) mit Quellenangabe, für die App umgebaut. Der Jahrgang 2025 gilt als guter Standard, 2024 war zu schwer.
+- **Material der Lehrkraft** (zum Beispiel das Arbeitsblatt „Mein Kompass-Wörterbuch“) darf ausdrücklich genutzt werden, auch mit ihren Formulierungen (siehe `kompass-begriffe.js`). Das gilt nur, wenn der Vater es so sagt.
 - **Fremdmaterial** (Übungshefte, Bonus-Proben anderer Verlage) **nicht abtippen**, nur als Themenkarte für eigene Aufgaben im gleichen Stil nutzen.
 - Lapbook/LZK Deutschland: alles im Lapbook muss rein, kein Inhalt darüber hinaus.
 

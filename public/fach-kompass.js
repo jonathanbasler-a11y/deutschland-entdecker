@@ -129,6 +129,7 @@
           <button class="mode big" data-act="k-probe" data-v="ma"><span class="ico">📝</span><div><b>Probe Mathe</b><br><span>Wie der echte Test: 3 Teile, ohne Rückmeldung</span></div></button>
           <button class="mode big" data-act="k-probe" data-v="de-orig"><span class="ico">📄</span><div><b>Echter Test Deutsch 2025</b><br><span>Aufgaben aus dem Original (IBBW)</span></div></button>
           <button class="mode big" data-act="k-probe" data-v="ma-orig"><span class="ico">📄</span><div><b>Echter Test Mathe 2025</b><br><span>Aufgaben aus dem Original (IBBW)</span></div></button>
+          <button class="mode big" data-act="k-woerter"><span class="ico">📖</span><div><b>Mein Kompass-Wörterbuch</b><br><span>Die wichtigen Begriffe nachlesen und üben</span></div></button>
           <button class="mode big" data-act="k-konner"><span class="ico">🌱</span><div><b>Mein Könnerblatt</b><br><span>Was ich schon kann und was ich noch übe</span></div></button>
           <section class="card"><h2>Deutsch</h2><div class="kareas">${areaList("de")}</div></section>
           <section class="card"><h2>Mathe</h2><div class="kareas">${areaList("ma")}</div></section>
@@ -171,6 +172,20 @@
       return newRound("practice", K.unitTasks(pickId), { area: areaId, unit: pickId, label: K.COMP[pickId].name });
     }
     newRound("practice", K.buildRound(K.compsOfArea(areaId), TEST.kRoundLen || 6, statsMap(), seed(), 2), { area: areaId, label: a.name });
+  }
+
+  /* ================= Mein Kompass-Wörterbuch (Fachbegriffe nach dem Arbeitsblatt der Lehrkraft) ================= */
+  function renderWoerter() {
+    const W = window.DEKompassBegriffe;
+    if (!W) return go("home");
+    const fach = (f, titel, comp) => {
+      const groups = [...new Set(W.TERMS.filter((x) => x.f === f).map((x) => x.g))];
+      return `<section class="card"><h2>${titel}</h2>${groups.map((g) => `<h3 class="wgrp">${esc(g)}</h3>${W.TERMS.filter((x) => x.f === f && x.g === g).map((x) => `<div class="wterm"><b>${esc(x.t)}</b><p>${esc(x.d)}</p>${x.ex ? `<small>Beispiel: ${esc(x.ex)}</small>` : ""}</div>`).join("")}`).join("")}<button class="btn" data-act="k-comp" data-v="${comp}">📝 Begriffe üben</button></section>`;
+    };
+    app.innerHTML = `<div class="results woerter"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein Kompass-Wörterbuch</h1></div>
+      <section class="card"><p>Diese Begriffe können im Test vorkommen. Lies sie in Ruhe, dann übe sie. Du musst nicht alles auf einmal können. 🌱</p></section>
+      ${fach("de", "Deutsch", "de.begriffe")}${fach("ma", "Mathe", "ma.begriffe")}
+      <section class="card"><h2>Mathe: Umrechnen</h2>${W.UMRECHNEN.map(([n, l]) => `<h3 class="wgrp">${n}</h3><p>${l.map(esc).join(" · ")}</p>`).join("")}</section></div>`;
   }
 
   /* ================= Könnerblatt (wie in der Schule: Samen, Keimling, Knospe, Blume) ================= */
@@ -763,6 +778,7 @@
   case "k-mown": { const old = merkFor(v), t = window.prompt("Deine Eselsbrücke (kurz, gern albern):", old && old.own ? old.text : ""); if (t != null) { const txt = t.trim().slice(0, 160); if (txt) KS().merk.my[v] = txt; else delete KS().merk.my[v]; save(); core.toast(txt ? "🧠 Deine Eselsbrücke ist gespeichert!" : "Eigene Eselsbrücke gelöscht."); const box = document.querySelector(".merk"); if (box) box.outerHTML = merkHtml(v); } break; }
       case "k-area": startArea(v); break;
       case "k-konner": go("k-konner"); break;
+      case "k-woerter": go("k-woerter"); break;
       case "k-comp": startComp(v); break;
       case "k-key": key(v); break;
       case "k-opt": if (r && !r.lock && r.cur.type === "choice") { r.lastOpt = +v; submit(+v); } break;
@@ -822,7 +838,7 @@
     id: "kompass", prefix: "k-", name: "Kompass 4", icon: "🧭",
     home, act, badges,
     xp: () => (core.S.kompass && core.S.kompass.xp) || 0,
-    render(view) { if (view === "k-game") return drawGame(); if (view === "k-results") return renderResults(); if (view === "k-konner") return renderKonner(); if (view === "k-pintro") return renderProbeIntro(); if (view === "k-preview") return probeReview(); go("home"); },
+    render(view) { if (view === "k-game") return drawGame(); if (view === "k-results") return renderResults(); if (view === "k-konner") return renderKonner(); if (view === "k-woerter") return renderWoerter(); if (view === "k-pintro") return renderProbeIntro(); if (view === "k-preview") return probeReview(); go("home"); },
     activeOn: (k) => !!(core.S.kompass && core.S.kompass.days && core.S.kompass.days[k]),
     parents, bindParents,
   };

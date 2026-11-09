@@ -761,3 +761,10 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .merk { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: #efe7ff; color: #2d1b5a; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; text-align: left; font-size: .95rem; }
 .merk .mkb { display: inline-flex; gap: 6px; }
 .merk .mk { min-height: 40px; min-width: 44px; border-radius: 10px; border: 2px solid #b9a3f0; background: #fff; font: inherit; }
+
+/* Kompass-Wörterbuch */
+.wgrp { margin: 14px 0 4px; color: #3b82f6; font-size: 1rem; }
+.wterm { padding: 8px 0; border-bottom: 1px solid #0002; }
+.wterm b { font-size: 1.05rem; }
+.wterm p { margin: 2px 0; }
+.wterm small { color: #6a7a90; }
