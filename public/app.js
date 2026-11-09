@@ -59,6 +59,7 @@
     const blob = new Blob([JSON.stringify(S)], { type: "application/json" }), a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = `entdecker-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    S.lastBackup = Date.now(); save(); showVersion();
   };
   const backupLoad = (file) => {
     const fr = new FileReader();
@@ -387,7 +388,7 @@
     app.innerHTML = `<div class="results petview"><div class="gbar"><button class="icon-btn" data-act="home" aria-label="Zurück">←</button><h1 style="flex:1">Mein ${esc(K.word)}</h1></div>
       <section class="card petstage">
         <div class="room" style="background:${B.roomOf(p.room).bg}">
-        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind)}${(p.worn || []).map((id) => { const a = B.ACC.find((x) => x.id === id); return a ? `<span class="acc acc-${a.slot}" aria-hidden="true">${a.icon}</span>` : ""; }).join("")}</button>
+        <button class="bigdog ${active(dayKey()) ? "happy" : "wait"}" id="bigdog" data-act="petpet" aria-label="${esc(p.name)} streicheln">${B.dog(xp, "", "", p.kind, p.worn)}</button>
         <div class="decor" aria-hidden="true">${(p.decor || []).map((id) => { const d = B.DECOR.find((x) => x.id === id); return d ? `<span>${d.icon}</span>` : ""; }).join("")}</div></div>
         <div class="petmeta"><h2>${esc(p.name)}</h2><div class="stage">${g.name}</div>
           <div class="pbar big"><i style="width:${g.pct}%"></i></div>
@@ -1588,7 +1589,7 @@
         </div>
         <p class="tip">Tipp bei Konzentrationsschwierigkeiten: lieber 2 bis 3 kurze Einheiten am Tag (eine Tagesmission dauert etwa 10 Minuten) als eine lange. Die Bewegungspause zwischen den Etappen hilft beim Weitermachen.</p>
         <h2 style="margin-top:14px">Sicherung</h2>
-        <p class="muted">Der Spielstand liegt auf diesem Gerät im Browser und wird zusätzlich doppelt gesichert. Speichere ab und zu eine Sicherungsdatei (landet in „Dateien“). Mit „Sicherung laden“ kommt alles zurück, auch auf einem anderen Gerät.</p>
+        <p class="muted">Letzte Sicherungsdatei: ${S.lastBackup ? new Date(S.lastBackup).toLocaleString("de-DE") : "noch keine"}. Der Spielstand liegt auf diesem Gerät im Browser und wird zusätzlich doppelt gesichert. Speichere ab und zu eine Sicherungsdatei (landet in „Dateien“). Mit „Sicherung laden“ kommt alles zurück, auch auf einem anderen Gerät.</p>
         <div class="row"><button class="btn" data-act="backup">Sicherung speichern</button><label class="btn ghost" for="bkfile" role="button" tabindex="0">Sicherung laden</label><input type="file" id="bkfile" accept=".json,application/json" hidden></div>
         <button class="linkbtn" data-act="reset" id="rst">Alles zurücksetzen</button>
       </section></div>`;
@@ -1711,6 +1712,16 @@
     get S() { return S; }, get R() { return R; }, ITEMS, get F() { return FAECH; }, totalXp, save, KEY,
     get skipSave() { return skipSave; }, set skipSave(v) { skipSave = !!v; },
   };
+  // Versionsnummer oben rechts; amber, wenn die letzte Sicherungsdatei älter als 3 Tage ist. Antippen speichert eine Sicherung.
+  function showVersion() {
+    let el = document.getElementById("ver");
+    if (!el) { el = document.createElement("button"); el.id = "ver"; el.type = "button"; document.body.appendChild(el); el.onclick = () => { if (confirm("Sicherung als Datei speichern? (landet in „Dateien“)")) { backupDownload(); toast("Sicherung gespeichert."); } }; }
+    const v = (window.DE_VERSION && window.DE_VERSION.n) || "?", age = S.lastBackup ? (Date.now() - S.lastBackup) / 864e5 : null;
+    el.textContent = `Version ${v}` + (age == null ? " · noch keine Sicherung" : age > 3 ? ` · Sicherung vor ${Math.floor(age)} T.` : " · gesichert ✓");
+    el.classList.toggle("old", age == null || age > 3);
+    el.setAttribute("aria-label", el.textContent + ". Antippen: Sicherung speichern");
+  }
+  showVersion();
   // Einmaliges Geschenk nach dem verlorenen Spielstand: 5000 Punkte und 24 Stunden dreifache Punkte zum Aufholen
   if (!S.gift2 && (!window.__DE_TEST || TEST.gift)) {
     S.gift = (S.gift || 0) + 5000; S.gift2 = true;

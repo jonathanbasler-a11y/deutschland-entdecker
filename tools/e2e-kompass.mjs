@@ -402,6 +402,62 @@ for (const fach of ["de", "ma"]) {
   await ctx.close();
 }
 
+// 3f) Wachsende Übungszeit, Tagesziel-Balken, unbegrenzte Bonus-Etappen, Versionsanzeige
+{
+  const { ctx, p } = await fresh("2026-11-12", undefined, { kRoundLen: 3 });
+  check((await p.textContent("#ver")).startsWith("Version "), "Versionsnummer oben sichtbar: " + (await p.textContent("#ver")));
+  check(/von 28 Min/.test(await p.textContent(".gtime")), "Tagesziel 28 Minuten am 12.11. sichtbar");
+  check(await p.locator(".mission .path li").count() === 5, "12.11.: 4 Etappen und Ziel im Pfad (wächst von Tag zu Tag)");
+  check(/Heute geht es los|Stück für Stück|Ziel erreicht/.test(await p.textContent(".gtime")), "aufmunternder Satz beim Zeitbalken");
+  await p.evaluate(() => { const k = window.__DE_K.KS(); k.done["2026-11-12"] = true; });
+  await p.click('[data-act="home"]').catch(() => {});
+  await p.evaluate(() => document.querySelector('[data-act="subject"][data-v="kompass"]').click());
+  check(await p.locator('[data-act="k-bonus"]').count() >= 1, "Bonus-Etappe wird nach dem Tagesziel angeboten");
+  const x0 = await p.evaluate(() => window.__DE_K.KS().xp);
+  await p.click('[data-act="k-bonus"]');
+  await playRound(p);
+  await p.waitForSelector(".kresults");
+  check(/Bonus-Etappe geschafft/.test(await p.textContent(".kresults")) && await p.locator('.kresults [data-act="k-bonus"]').count() === 1, "Bonus-Etappe: Ergebnis mit Knopf für noch eine (unbegrenzt)");
+  check(await p.evaluate((x0) => window.__DE_K.KS().bonus === 1 && window.__DE_K.KS().xp >= x0 + 30, x0), "Bonus-Etappe zählt und gibt Extra-Punkte");
+  await p.click('.kresults [data-act="k-bonus"]');
+  await playRound(p);
+  check(await p.evaluate(() => window.__DE_K.KS().bonus === 2), "Zweite Bonus-Etappe geht auch");
+  check(p.errors.length === 0, "Bonus ohne Fehler " + p.errors.join("|"));
+  await ctx.close();
+}
+
+// 3g) Eselsbrücken: nach einem Fehler sichtbar, 👍 merken, 👎 ausblenden, eigene eintragen (bleibt gespeichert)
+{
+  const { ctx, p } = await fresh("2026-11-12", undefined, { kRoundLen: 3 });
+  await p.evaluate(() => window.__DE_K.play(["ma.runden", "ma.runden", "ma.geteilt"]));
+  await p.waitForSelector("#kcard");
+  await answer(p, false);
+  await p.waitForSelector(".merk");
+  check(/Eselsbrücke/.test(await p.textContent(".merk")) && /fällt ab/.test(await p.textContent(".merk")), "Fehler zeigt Eselsbrücke zum Runden");
+  await p.click('.merk [data-act="k-mup"]');
+  check(await p.evaluate(() => window.__DE_K.KS().merk.vote["ma.runden:0"] === 1), "👍 wird gespeichert");
+  p.once("dialog", (d) => d.accept("Runden: 5 geht hoch, 4 bleibt zu Hause"));
+  await p.click('.merk [data-act="k-mown"]');
+  await p.waitForFunction(() => /bleibt zu Hause/.test(document.querySelector(".merk").textContent));
+  check(await p.evaluate(() => window.__DE_K.KS().merk.my["ma.runden"].includes("5 geht hoch")) && /Deine Eselsbrücke/.test(await p.textContent(".merk")), "Eigene Eselsbrücke gespeichert und als Deine angezeigt");
+  check(await p.locator('.merk [data-act="k-mup"]').count() === 0, "Bei eigener Eselsbrücke keine Bewertung nötig");
+  // zweite Aufgabe derselben Art: eigene Eselsbrücke kommt zuerst
+  await p.evaluate(() => { const r = window.__DE_K.R; r.lock = true; });
+  await p.evaluate(() => document.querySelector("#knx") && document.querySelector("#knx").click());
+  // 👎 bei anderer Aufgabenart: Vorschlag verschwindet
+  await p.evaluate(() => window.__DE_K.play(["ma.geteilt"]));
+  await p.waitForSelector("#kcard");
+  await answer(p, false);
+  await p.waitForSelector(".merk");
+  check(/Dicke Mäuse/.test(await p.textContent(".merk")), "Eselsbrücke für schriftliches Teilen: Dicke Mäuse suchen Beeren");
+  await p.click('.merk [data-act="k-mdn"]');
+  check(await p.evaluate(() => window.__DE_K.KS().merk.vote["ma.geteilt:0"] === -1) && !/Dicke Mäuse/.test(await p.textContent(".merk")) && /Probe: Ergebnis/.test(await p.textContent(".merk")), "👎 blendet den Vorschlag aus, die nächste Eselsbrücke kommt");
+  await p.reload(); await p.waitForSelector("#ver");
+  check(await p.evaluate(() => window.__DE.S.kompass.merk.my["ma.runden"].includes("5 geht hoch") && window.__DE.S.kompass.merk.vote["ma.geteilt:0"] === -1), "Eselsbrücken überstehen Neuladen");
+  check(p.errors.length === 0, "Eselsbrücken ohne Fehler " + p.errors.join("|"));
+  await ctx.close();
+}
+
 // 4) Eltern-Übersicht und Hochformat
 {
   const { ctx, p } = await fresh("2026-11-07", { width: 820, height: 1180 });

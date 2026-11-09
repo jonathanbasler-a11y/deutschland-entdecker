@@ -748,3 +748,16 @@ body.calm .project .newblock { animation: none; opacity: 0; }
 .decor { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font-size: 2rem; min-height: 8px; }
 .snack.on { outline: 3px solid #3b82f6; }
 .rsw { display: block; width: 44px; height: 32px; border-radius: 8px; border: 2px solid #cdd6e3; }
+
+/* Übungszeit, Ziel-Zone, Versionsanzeige */
+.gtime { margin: 4px 0 10px; }
+.gtime .pbar.big { max-width: none; }
+.zone { margin: 6px 0; padding: 8px 12px; border-radius: 12px; background: #fff3d6; color: #5a4300; }
+.zone.in { background: #dff3e3; color: #14501f; }
+#ver { position: fixed; top: 4px; right: 8px; z-index: 30; font-size: .72rem; padding: 2px 8px; border-radius: 10px; background: rgba(0,0,0,.35); color: #fff; border: 0; font-family: inherit; }
+#ver.old { background: #b86b00; }
+
+/* Eselsbrücken */
+.merk { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: #efe7ff; color: #2d1b5a; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; text-align: left; font-size: .95rem; }
+.merk .mkb { display: inline-flex; gap: 6px; }
+.merk .mk { min-height: 40px; min-width: 44px; border-radius: 10px; border: 2px solid #b9a3f0; background: #fff; font: inherit; }

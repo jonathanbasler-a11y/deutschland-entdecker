@@ -8,7 +8,7 @@
   const TEST_DE = "2026-11-18", TEST_MA = "2026-11-19";
 
   /* ================= Speicher (S.kompass) ================= */
-  const kdefaults = () => ({ xp: 0, comp: {}, days: {}, done: {}, mission: { day: "", step: 0 }, missionsDone: 0, checks: [], probes: [], total: 0, bestCombo: 0, set: { testDate: TEST_DE } });
+  const kdefaults = () => ({ xp: 0, comp: {}, days: {}, done: {}, mission: { day: "", step: 0 }, missionsDone: 0, checks: [], probes: [], merk: { my: {}, vote: {} }, mins: {}, goalDone: {}, bonus: 0, total: 0, bestCombo: 0, set: { testDate: TEST_DE, target: 60 } });
   let merged = null;
   function KS() {
     const S = core.S;
@@ -21,6 +21,19 @@
       S.kompass = m; merged = m;
     }
     return S.kompass;
+  }
+  // Eselsbrücken: eigene zuerst, sonst die erste nicht abgelehnte; 👍 merkt, 👎 blendet aus
+  const MERK = (window.DEKompassMerk && window.DEKompassMerk.MERK) || {};
+  function merkFor(comp) {
+    const m = KS().merk || (KS().merk = { my: {}, vote: {} });
+    m.my = m.my || {}; m.vote = m.vote || {};
+    if (m.my[comp]) return { text: m.my[comp], own: true };
+    const list = MERK[comp] || [], liked = list.findIndex((_, i) => m.vote[comp + ":" + i] === 1), idx = liked >= 0 ? liked : list.findIndex((_, i) => m.vote[comp + ":" + i] !== -1);
+    return idx >= 0 ? { text: list[idx], idx } : null;
+  }
+  function merkHtml(comp) {
+    const m = merkFor(comp);
+    return `<div class="merk" data-comp="${esc(comp)}"><span>🧠 <b>${m && m.own ? "Deine Eselsbrücke" : "Eselsbrücke"}:</b> ${m ? esc(m.text) : "Noch keine. Erfinde selbst eine!"}</span><span class="mkb">${m && !m.own ? `<button class="mk" data-act="k-mup" data-v="${esc(comp)}" aria-label="Gefällt mir">👍</button><button class="mk" data-act="k-mdn" data-v="${esc(comp)}" aria-label="Andere zeigen">👎</button>` : ""}<button class="mk" data-act="k-mown" data-v="${esc(comp)}">✏️ Eigene</button></span></div>`;
   }
   const stat = (id) => KS().comp[id] || (KS().comp[id] = { n: 0, ok: 0, recent: [], stars: 0 });
   const starsOf = (id) => (KS().comp[id] && KS().comp[id].stars) || 0;
@@ -65,10 +78,12 @@
   }
   // Etappen für heute (außerhalb des Plans: freies Training wie ein Trainingstag)
   const todayKind = () => (todayPlan() ? todayPlan().kind : "full");
-  const todaySteps = () => K.etappen(todayKind());
+  const todayMin = () => (todayPlan() && todayPlan().min) || 21;
+  const todaySteps = () => K.etappen(todayKind(), todayMin());
+  const minsToday = () => Math.round((KS().mins[dayKey()] || 0) * 10) / 10;
   function pathHtml(steps, step) {
     if (steps.length < 2) return "";
-    return `<ol class="path">${steps.map((m, i) => `<li class="${i < step ? "done" : i === step ? "now" : ""}"><span class="dot">${i < step ? "✓" : ["🔤", "🔢", "🎯"][i] || "•"}</span><span>${esc(m.name)}</span></li>`).join("")}<li class="${step >= steps.length ? "done" : ""}"><span class="dot">🏆</span><span>Geschafft</span></li></ol>`;
+    return `<ol class="path">${steps.map((m, i) => `<li class="${i < step ? "done" : i === step ? "now" : ""}"><span class="dot">${i < step ? "✓" : ["🔤", "🔢", "🎯"][i % 3]}</span><span>${esc(m.name)}</span></li>`).join("")}<li class="${step >= steps.length ? "done" : ""}"><span class="dot">🏆</span><span>Geschafft</span></li></ol>`;
   }
 
   /* ================= Startseite ================= */
@@ -84,12 +99,16 @@
     let btn;
     if ((kind === "probe-de" || kind === "probe-ma") && !done) btn = `<button class="mode big" data-act="k-probe" data-v="${kind.slice(6)}"><span class="ico">📝</span><div><b>Los geht's: Probe ${kind === "probe-de" ? "Deutsch" : "Mathe"}</b><br><span>${esc(text)}</span></div></button>`;
     else if (kind === "check" && !done) btn = `<button class="mode big" data-act="k-check"><span class="ico">🧭</span><div><b>Los geht's: Startcheck</b><br><span>${esc(text)}</span></div></button>`;
-    else if (done) btn = `<div class="done-msg"><b>Für heute geschafft! 🏆</b><span>Super! Du kannst aufhören. Wenn du magst, übe unten einen Bereich.</span></div>`;
+    else if (done) btn = `<div class="done-msg"><b>Tagesziel geschafft! 🏆</b><span>Stark! Du kannst aufhören. Du kannst aber auch weitermachen: Jede Bonus-Etappe bringt Punkte, Münzen und Blöcke, so viele du magst.</span></div><button class="mode big" data-act="k-bonus"><span class="ico">🚀</span><div><b>Bonus-Etappe</b><br><span>6 Aufgaben, extra Belohnung. Unbegrenzt!</span></div></button>`;
     else {
       const step = Math.min(mstep(), steps.length - 1), s = steps[step];
       btn = `<button class="mode big" data-act="k-mission"><span class="ico">${KIND_ICON[kind] || "💪"}</span><div><b>${mstep() === 0 ? "Los geht's" : "Weiter"}: ${steps.length > 1 ? `Etappe ${step + 1} von ${steps.length} · ` : ""}${esc(s.name)}</b><br><span>${esc(text)}</span></div></button>`;
     }
-    return `<section class="card mission"><h2>Heute: ${esc(title)}</h2>${kind !== "check" && !done ? pathHtml(steps, mstep()) : ""}${btn}</section>`;
+    // Übungszeit heute: Balken zum Tagesziel, ruhig und aufmunternd
+    const goal = p && p.min ? p.min : kind === "lzk" || kind === "mut" || kind === "warm" ? 5 : 20, got = minsToday(), pct = Math.min(100, Math.round((got / goal) * 100));
+    const cheerLine = got >= goal ? "Ziel erreicht, super! Alles ab jetzt ist Bonus. 🌟" : got > 0 ? `Schon ${Math.round(got)} Minuten! Weiter so, Stück für Stück. 💪` : "Heute geht es los. Die erste Etappe ist die leichteste. 🌱";
+    const bar = kind === "check" ? "" : `<div class="gtime"><div class="pbar big" aria-label="Übungszeit heute: ${Math.round(got)} von ${goal} Minuten"><i style="width:${pct}%"></i></div><p class="muted"><b>${Math.round(got)} von ${goal} Min.</b> · ${cheerLine}</p></div>`;
+    return `<section class="card mission"><h2>Heute: ${esc(title)}</h2>${bar}${kind !== "check" && !done ? pathHtml(steps, mstep()) : ""}${btn}</section>`;
   }
   function areaList(fach) {
     return K.AREAS.filter((a) => a.fach === fach).map((a) => {
@@ -102,7 +121,7 @@
     app.innerHTML = `${core.header({ title: "Kompass 4", ranks: RANKS, xp: k.xp, chips: chips() })}
       <div class="home khome">
         <section class="card"><h2>Dein 2-Wochen-Plan</h2>${calendar()}
-          <p class="legend">Deutsch am Mi 18.11., Mathe am Do 19.11. Jeden Tag ein kleines Stück. Verpasste Tage sind nicht schlimm.</p>
+          <p class="legend">${(() => { const tot = Math.round(Object.values(k.mins || {}).reduce((x, y) => x + y, 0)); const dd = daysUntil(k.set.testDate || TEST_DE); return `🌟 ${tot ? `Du hast schon <b>${tot} Minuten</b> Kompass geübt. Jede Minute zählt!` : "Heute ist ein guter Tag zum Starten. Du schaffst das!"}${dd > 0 ? ` Noch ${dd} ${dd === 1 ? "Tag" : "Tage"} bis zum Test: Jeden Tag ein Stück länger, bis du die ganze Testzeit durchhältst.` : ""}`; })()}</p>
           <h2 style="margin-top:14px">Test-Tipps</h2><ul class="ktips"><li>Lies jede Frage zweimal.</li><li>Weißt du etwas nicht? Überspringen und später wiederkommen.</li><li>Am Ende alles noch einmal anschauen.</li></ul></section>
         <div class="right">
           ${todayCard()}
@@ -136,6 +155,11 @@
     const s = steps[step];
     const tasks = K.buildRound(compsFor(s.areas), TEST.kRoundLen || s.n, statsMap(), seed(), s.easy ? 1 : 2);
     newRound("mission", tasks, { mstep: step, steps: steps.length, easy: !!s.easy, label: (steps.length > 1 ? `Etappe ${step + 1} · ` : "") + s.name });
+  }
+  // Bonus-Etappe: unbegrenzt, mischt Deutsch und Mathe, schwache Aufgabenarten kommen öfter
+  function startBonus() {
+    const tasks = K.buildRound(compsFor(["de", "ma"]), TEST.kRoundLen || 6, statsMap(), seed(), 2);
+    newRound("bonus", tasks, { label: "🚀 Bonus-Etappe" });
   }
   function startArea(areaId) {
     const a = K.AREAS.find((x) => x.id === areaId);
@@ -292,10 +316,11 @@
     const stage = r.pct >= 90 ? 3 : r.pct >= 75 ? 2 : r.pct >= 50 ? 1 : 0, rt = r.rating;
     const msg = rt > stage ? `Du hast dich auf ${PLANT[rt]} eingeschätzt, das Ergebnis liegt bei ${PLANT[stage]}. Das ist ganz normal. Schau dir unten an, was noch nicht klappt, dann wächst beides zusammen.`
       : rt < stage ? `Du hast dich auf ${PLANT[rt]} eingeschätzt, und es ist ${PLANT[stage]}! Du kannst mehr, als du denkst. 🎉` : `Deine Einschätzung ${PLANT[rt]} passt zum Ergebnis. Gut erkannt!`;
+    const tgt = KS().set.target || 60, zone = r.pct >= tgt ? `<p class="zone in">🎯 Du bist in der Ziel-Zone! So kannst du am Testtag auch arbeiten.</p>` : `<p class="zone">🌱 Noch ${tgt - r.pct} Prozentpunkte bis zur Ziel-Zone. Das ist gut zu schaffen: Jede Übungsrunde bringt dich ein Stück näher.</p>`;
     const prof = K.AREAS.filter((a) => r.byArea[a.id]).map((a) => { const x = r.byArea[a.id]; return `<tr><td>${a.icon} ${esc(a.name)}</td><td>${x.ok} / ${x.n}</td><td>${PLANT[x.n ? (x.ok / x.n >= 0.9 ? 3 : x.ok / x.n >= 0.75 ? 2 : x.ok / x.n >= 0.5 ? 1 : 0) : 0]}</td></tr>`; }).join("");
     const wrongs = r.wrongList.slice(0, 12).map((x) => `<details class="pwrong"><summary>${x.blank ? "○ leer" : "✗"} ${esc(x.t.q)}</summary><p><b>Lösung:</b> ${esc(K.solution(x.t))}</p><p class="muted">${esc(x.t.explain)}</p></details>`).join("");
     const selfs = r.selfOpen.map((x) => `<details class="pwrong"><summary>✎ ${esc(x.t.q)}</summary><p><b>Deine Antwort:</b> ${esc(x.text) || "(leer)"}</p><p><b>So kann es aussehen:</b> ${esc(x.t.model)}</p></details>`).join("");
-    return `<div class="card"><h2>So ist es dir gegangen</h2><p>${msg}</p><table class="tbl"><thead><tr><th>Bereich</th><th>richtig</th><th>Pflanze</th></tr></thead><tbody>${prof}</tbody></table><p class="muted">Das ist eine Übungsprobe, keine Note. Sie zeigt dir, was du als Nächstes übst.</p></div>
+    return `<div class="card"><h2>So ist es dir gegangen</h2><p>${msg}</p>${zone}<table class="tbl"><thead><tr><th>Bereich</th><th>richtig</th><th>Pflanze</th></tr></thead><tbody>${prof}</tbody></table><p class="muted">Das ist eine Übungsprobe, keine Note. Sie zeigt dir, was du als Nächstes übst.</p></div>
       ${wrongs ? `<div class="card"><h2>Das schauen wir uns an</h2>${wrongs}</div>` : ""}${selfs ? `<div class="card"><h2>Zum Nachlesen: deine eigenen Sätze</h2>${selfs}</div>` : ""}`;
   }
 
@@ -533,7 +558,7 @@
     if (it.boss) core.bossUI.block(r); else core.petReact("tilt");
     tone("bad");
     if (r.attempt === 1 && r.mode !== "check" && t.type !== "self") {
-      fb("hint", `${it.boss ? "Der Boss blockt!" : res && res.caseOnly ? "Fast! Achte auf Groß- und Kleinschreibung." : "Nicht ganz."} 💡 ${esc(t.tip)}`);
+      fb("hint", `${it.boss ? "Der Boss blockt!" : res && res.caseOnly ? "Fast! Achte auf Groß- und Kleinschreibung." : "Nicht ganz."} 💡 ${esc(t.tip)}${it.boss ? "" : merkHtml(t.comp)}`);
       // Eingaben zurücksetzen, damit er es noch einmal versucht
       if (t.type === "num") { r.input = ""; setTimeout(drawInput, 500); const a = $("#mans"); if (a) a.classList.add("bad"); }
       if (t.type === "nums") { r.vals = t.fields.map(() => ""); r.fld = 0; document.querySelectorAll(".kfield").forEach((b) => b.classList.add("bad")); setTimeout(() => { document.querySelectorAll(".kfield").forEach((b) => b.classList.remove("bad")); drawNums(); }, 600); }
@@ -551,7 +576,7 @@
     }
     $("#kcard").classList.add("badc");
     markSolution(false);
-    fb(r.mode === "check" ? "hint" : "bad", `${r.mode === "check" ? "Das üben wir noch. " : ""}Lösung: <b>${esc(K.solution(t))}</b><small>${esc(t.explain)}${it.repeat || r.mode === "check" ? "" : " · Die Aufgabe kommt gleich noch einmal."}</small>`);
+    fb(r.mode === "check" ? "hint" : "bad", `${r.mode === "check" ? "Das üben wir noch. " : ""}Lösung: <b>${esc(K.solution(t))}</b><small>${esc(t.explain)}</small>${it.boss ? "" : merkHtml(t.comp)}<small>${it.repeat || r.mode === "check" ? "" : " · Die Aufgabe kommt gleich noch einmal."}</small>`);
     // ein einziger Weiter-Knopf: bei Zahlen auf dem Ziffernblock, beim Schreiben im Formular, sonst darunter
     if (t.type === "num" || t.type === "nums") { const kok = $("#kok"); if (kok) { kok.textContent = "Weiter"; kok.id = "knx"; kok.classList.add("wide"); } }
     else if (t.type === "write") { const s = $("#kws"); if (s) { s.textContent = "Weiter"; s.id = "knx"; } }
@@ -609,7 +634,13 @@
       k.done[dayKey()] = true;
       k.checks.push({ date: dayKey(), n, ok, comps: r.results.map((x) => [x.t.comp, x.ok ? 1 : 0]) });
     }
-    const blocks = r.mode === "mission" ? 3 : r.mode === "check" ? 2 : n ? 1 : 0;
+    // Übungszeit zählen; Tagesziel erreicht = einmalig Bonus. Bonus-Etappen gibt es unbegrenzt und belohnen extra.
+    const dm = Math.min(12, (Date.now() - r.t0) / 60000), td = dayKey();
+    k.mins[td] = Math.round(((k.mins[td] || 0) + dm) * 10) / 10;
+    const pl = todayPlan(), goal = pl && pl.min ? pl.min : 20;
+    if (k.mins[td] >= goal && !k.goalDone[td] && r.mode !== "check") { k.goalDone[td] = true; k.xp += 150; r.xp += 150; r.goalHit = true; }
+    if (r.mode === "bonus") { k.bonus = (k.bonus || 0) + 1; k.xp += 30; r.xp += 30; }
+    const blocks = r.mode === "mission" ? 3 : r.mode === "bonus" ? 2 : r.mode === "check" ? 2 : n ? 1 : 0;
     r.loot = blocks ? core.giveBlocks(blocks) : null;
     save();
     core.checkBadges();
@@ -638,9 +669,15 @@
       head = all ? "Für heute geschafft! 🏆" : `Etappe ${step} geschafft!`;
       sub = all ? `+${r.xp} Punkte. Super gemacht! Für heute kannst du aufhören.` : `+${r.xp} Punkte. Noch ${r.steps - step} ${r.steps - step === 1 ? "Etappe" : "Etappen"}.`;
       if (r.steps > 1) extra = `<div class="mission">${pathHtml(todaySteps(), step)}</div>`;
-      buttons = all ? `<button class="btn" data-act="home">Fertig für heute</button>`
+      buttons = all ? `<button class="btn" data-act="k-bonus">🚀 Bonus-Etappe (extra Belohnung)</button><button class="btn ghost" data-act="home">Fertig für heute</button>`
         : `<button class="btn" data-act="k-mission">Weiter zu Etappe ${step + 1}</button><button class="btn ghost" data-act="k-pause">Erst Bewegungspause (20 s)</button><button class="btn ghost" data-act="home">Für heute aufhören</button>`;
+    } else if (r.mode === "bonus") {
+      head = "Bonus-Etappe geschafft! 🚀";
+      sub = `+${r.xp} Punkte. Das war freiwillig, das zählt doppelt. Bonus-Etappen insgesamt: ${KS().bonus}.`;
+      buttons = `<button class="btn" data-act="k-bonus">🚀 Noch eine Bonus-Etappe</button><button class="btn ghost" data-act="home">Fertig</button>`;
     } else head = r.pct === 100 ? "Alles richtig! 🎉" : r.pct >= 80 ? "Stark gemacht!" : r.pct >= 50 ? "Gut gemacht!" : "Weiter üben, du schaffst das!";
+    const cheer = r.pct >= 80 ? "Wow, das war richtig stark! Du wirst jeden Tag sicherer." : r.pct >= 50 ? "Gut gemacht! Jede Runde macht dich sicherer." : "Mutig durchgezogen! Fehler zeigen, was gleich wächst. Beim nächsten Mal klappt mehr.";
+    sub = `${sub}${r.goalHit ? " 🎯 Tagesziel erreicht, +150 Bonuspunkte!" : ""} ${cheer}`;
     const gains = r.gains.map((g) => `⭐ ${esc(compName(g.comp))}: jetzt ${starStr(g.stars)}`).concat([core.bossUI.line(r.boss), r.loot ? r.loot.text : ""].filter(Boolean));
     let hint = "";
     if (r.mode !== "mission" && core.pauseHint()) hint = `<div class="card pausehint"><b>Du übst schon eine Weile, super!</b><span>Zeit für eine kurze Pause?</span><button class="btn ghost" data-act="k-pausehome">Bewegungspause (20 s)</button></div>`;
@@ -695,7 +732,7 @@
       const pct = x.n ? Math.round((x.ok / x.n) * 100) : 0, st = pctStage(pct), r = x.rating;
       const rel = r == null ? "" : r > st ? "schätzt sich höher ein" : r < st ? "schätzt sich niedriger ein" : "passt";
       const parts = Object.entries(x.areas || {}).map(([id, v]) => { const a = K.AREAS.find((y) => y.id === id); return `${a ? esc(a.name) : id} ${v.ok}/${v.n}`; }).join(" · ");
-      return `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}${x.orig ? " (Original)" : ""}</td><td>${x.ok} / ${x.n} (${pct} %)</td><td>${PLANT[r] || ""} → ${PLANT[st]} ${rel}</td></tr>${parts ? `<tr><td colspan="4" class="muted">${parts}</td></tr>` : ""}`;
+      return `<tr><td>${esc(x.date)}</td><td>${x.fach === "de" ? "Deutsch" : "Mathe"}${x.orig ? " (Original)" : ""}</td><td>${x.ok} / ${x.n} (${pct} %)${pct >= (k.set.target || 60) ? " 🎯" : ""}</td><td>${PLANT[r] || ""} → ${PLANT[st]} ${rel}</td></tr>${parts ? `<tr><td colspan="4" class="muted">${parts}</td></tr>` : ""}`;
     }).join("");
     return `${sec}
       <section class="card"><h2>Kompass 4: Stand</h2><p class="muted" style="margin-bottom:8px">Plan: ${doneDays} von ${K.PLAN.length} Tagen geschafft · ${k.total} Aufgaben · ${k.missionsDone} Trainingstage.</p>
@@ -703,12 +740,14 @@
         <p class="muted" style="margin-top:8px">★ 3 von 4 richtig · ★★ 75 % der letzten 8 · ★★★ 90 % der letzten 10. Sterne bleiben.</p></section>
       <section class="card"><h2>Proben</h2>${k.probes.length ? `<table class="tbl"><thead><tr><th>Datum</th><th>Fach</th><th>Richtig</th><th>Einschätzung → Ergebnis</th></tr></thead><tbody>${probeRows}</tbody></table><p class="muted" style="margin-top:8px">Übungsproben, keine Note. Freie Antworten werden nicht gewertet. Die Selbsteinschätzung wird vor der Probe gewählt (Samen bis Blume).</p>` : `<p class="muted">Noch keine Probe gemacht.</p>`}</section>
       <section class="card"><h2>Einstellungen Kompass</h2><div class="setgrid">
+        <label for="k-tg">Ziel in den Proben in Prozent (Orientierung, ändern nach Absprache mit der Schule)</label><input type="number" id="k-tg" min="30" max="100" step="5" value="${esc(String(k.set.target || 60))}">
         <label for="k-td">Datum Kompass Deutsch</label><input type="date" id="k-td" value="${esc(k.set.testDate || TEST_DE)}">
         <label for="k-boss">Boss-Kampf am Ende jeder Etappe (gilt für alle Fächer)</label><input type="checkbox" id="k-boss" ${core.bossOn() ? "checked" : ""}>
         </div><button class="linkbtn" data-act="k-reset">Kompass zurücksetzen</button></section>`;
   }
   function bindParents() {
     const bind = (id, fn) => { const el = $("#" + id); if (el) el.onchange = () => { fn(el); save(); }; };
+    bind("k-tg", (el) => { const v = +el.value; if (v >= 30 && v <= 100) KS().set.target = v; });
     bind("k-td", (el) => { if (/^\d{4}-\d{2}-\d{2}$/.test(el.value)) KS().set.testDate = el.value; });
     bind("k-boss", (el) => { core.S.bossOn = el.checked; });
   }
@@ -719,6 +758,9 @@
     switch (a) {
       case "k-check": startCheck(); break;
       case "k-mission": startMission(); break;
+      case "k-bonus": startBonus(); break;
+      case "k-mup": case "k-mdn": { const m = merkFor(v); if (m && !m.own) { KS().merk.vote[v + ":" + m.idx] = a === "k-mup" ? 1 : -1; save(); core.toast(a === "k-mup" ? "👍 Gemerkt! Die zeigen wir dir wieder." : "Okay, die zeigen wir nicht mehr."); const box = document.querySelector(".merk"); if (box) box.outerHTML = merkHtml(v); } break; }
+  case "k-mown": { const old = merkFor(v), t = window.prompt("Deine Eselsbrücke (kurz, gern albern):", old && old.own ? old.text : ""); if (t != null) { const txt = t.trim().slice(0, 160); if (txt) KS().merk.my[v] = txt; else delete KS().merk.my[v]; save(); core.toast(txt ? "🧠 Deine Eselsbrücke ist gespeichert!" : "Eigene Eselsbrücke gelöscht."); const box = document.querySelector(".merk"); if (box) box.outerHTML = merkHtml(v); } break; }
       case "k-area": startArea(v); break;
       case "k-konner": go("k-konner"); break;
       case "k-comp": startComp(v); break;
