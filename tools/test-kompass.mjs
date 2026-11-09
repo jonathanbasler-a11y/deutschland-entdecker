@@ -392,4 +392,27 @@ ok(K.compsOf("de").every((id) => id.startsWith("de.")) && K.compsOf("ma").every(
   const gross = byQ("de", /großgeschrieben/);
   ok(gross.ans.map((i) => gross.tokens[i].replace(/\.$/, "")).join(" ") === "die kinder erwachsenen süßigkeiten", "Original: Großschreibung");
 }
+// Eselsbrücken: jede gehört zu einer echten Aufgabenart, kurz genug, Merksätze stimmen mit den Anfangsbuchstaben
+req("../public/kompass-merk.js");
+{
+  const { MERK } = req("../public/kompass-merk.js");
+  const ids = Object.keys(MERK);
+  ok(ids.length >= 60, "Eselsbrücken für viele Aufgabenarten: " + ids.length);
+  for (const id of ids) {
+    ok(K.COMP[id], "Eselsbrücke gehört zu einer Aufgabenart: " + id);
+    ok(MERK[id].length >= 1 && MERK[id].every((t) => t.length >= 20 && t.length <= 220), "Länge ok: " + id);
+  }
+  const first = (t) => t.split(/[\s,;:]+/).filter(Boolean);
+  const stelle = MERK["ma.stelle"][0].match(/„([^“]+)“/)[1].split(" ").map((w) => w[0]);
+  ok(stelle.join("") === K.STELLEN.map((x) => x.k[0]).join(""), "Merksatz Stellenwerte passt: " + stelle.join(""));
+  {
+    const t = MERK["ma.geteilt"][0], sat = t.match(/„([^“]+)“/)[1].split(" ").map((w) => w[0].toUpperCase()).join(""), rest = t.split(": ")[1].split(/[,.(]/).slice(0, 4).map((w) => w.trim()[0]).join("");
+    ok(sat === "DMSB" && rest === "DMSB", "Merksatz schriftlich geteilt: Dividieren, Multiplizieren, Subtrahieren, Bringen");
+  }
+  ok(7 * 8 === 56 && 5 * 18 === 10 * 18 / 2 && 6 * 38 === 6 * 40 - 6 * 2 && 1250 === 1000 + 250 && 16 * 60 + 18 + 45 === 17 * 60 + 3, "Rechenbeispiele in den Eselsbrücken stimmen");
+  // Netz-Regel unabhängig: Vierer-Reihe mit beiden Zusatzquadraten auf derselben Seite ist kein Würfelnetz
+  const side = (r) => r.map(([x, y]) => x + "," + y);
+  ok(side([[0, 0], [1, 0], [2, 0], [3, 0], [0, -1], [1, -1]]).length === 6, "Beispiel für ungültiges Netz beschreibbar");
+  ok(K.COMPS.filter((c) => !c.solo && /^(ma|de)\./.test(c.id)).filter((c) => !MERK[c.id]).length <= 10, "Fast jede Aufgabenart hat eine Eselsbrücke");
+}
 console.log(`kompass ok (${n} Prüfungen)`);

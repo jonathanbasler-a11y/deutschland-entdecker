@@ -8,7 +8,7 @@
   const TEST_DE = "2026-11-18", TEST_MA = "2026-11-19";
 
   /* ================= Speicher (S.kompass) ================= */
-  const kdefaults = () => ({ xp: 0, comp: {}, days: {}, done: {}, mission: { day: "", step: 0 }, missionsDone: 0, checks: [], probes: [], mins: {}, goalDone: {}, bonus: 0, total: 0, bestCombo: 0, set: { testDate: TEST_DE, target: 60 } });
+  const kdefaults = () => ({ xp: 0, comp: {}, days: {}, done: {}, mission: { day: "", step: 0 }, missionsDone: 0, checks: [], probes: [], merk: { my: {}, vote: {} }, mins: {}, goalDone: {}, bonus: 0, total: 0, bestCombo: 0, set: { testDate: TEST_DE, target: 60 } });
   let merged = null;
   function KS() {
     const S = core.S;
@@ -21,6 +21,19 @@
       S.kompass = m; merged = m;
     }
     return S.kompass;
+  }
+  // Eselsbrücken: eigene zuerst, sonst die erste nicht abgelehnte; 👍 merkt, 👎 blendet aus
+  const MERK = (window.DEKompassMerk && window.DEKompassMerk.MERK) || {};
+  function merkFor(comp) {
+    const m = KS().merk || (KS().merk = { my: {}, vote: {} });
+    m.my = m.my || {}; m.vote = m.vote || {};
+    if (m.my[comp]) return { text: m.my[comp], own: true };
+    const list = MERK[comp] || [], liked = list.findIndex((_, i) => m.vote[comp + ":" + i] === 1), idx = liked >= 0 ? liked : list.findIndex((_, i) => m.vote[comp + ":" + i] !== -1);
+    return idx >= 0 ? { text: list[idx], idx } : null;
+  }
+  function merkHtml(comp) {
+    const m = merkFor(comp);
+    return `<div class="merk" data-comp="${esc(comp)}"><span>🧠 <b>${m && m.own ? "Deine Eselsbrücke" : "Eselsbrücke"}:</b> ${m ? esc(m.text) : "Noch keine. Erfinde selbst eine!"}</span><span class="mkb">${m && !m.own ? `<button class="mk" data-act="k-mup" data-v="${esc(comp)}" aria-label="Gefällt mir">👍</button><button class="mk" data-act="k-mdn" data-v="${esc(comp)}" aria-label="Andere zeigen">👎</button>` : ""}<button class="mk" data-act="k-mown" data-v="${esc(comp)}">✏️ Eigene</button></span></div>`;
   }
   const stat = (id) => KS().comp[id] || (KS().comp[id] = { n: 0, ok: 0, recent: [], stars: 0 });
   const starsOf = (id) => (KS().comp[id] && KS().comp[id].stars) || 0;
@@ -545,7 +558,7 @@
     if (it.boss) core.bossUI.block(r); else core.petReact("tilt");
     tone("bad");
     if (r.attempt === 1 && r.mode !== "check" && t.type !== "self") {
-      fb("hint", `${it.boss ? "Der Boss blockt!" : res && res.caseOnly ? "Fast! Achte auf Groß- und Kleinschreibung." : "Nicht ganz."} 💡 ${esc(t.tip)}`);
+      fb("hint", `${it.boss ? "Der Boss blockt!" : res && res.caseOnly ? "Fast! Achte auf Groß- und Kleinschreibung." : "Nicht ganz."} 💡 ${esc(t.tip)}${it.boss ? "" : merkHtml(t.comp)}`);
       // Eingaben zurücksetzen, damit er es noch einmal versucht
       if (t.type === "num") { r.input = ""; setTimeout(drawInput, 500); const a = $("#mans"); if (a) a.classList.add("bad"); }
       if (t.type === "nums") { r.vals = t.fields.map(() => ""); r.fld = 0; document.querySelectorAll(".kfield").forEach((b) => b.classList.add("bad")); setTimeout(() => { document.querySelectorAll(".kfield").forEach((b) => b.classList.remove("bad")); drawNums(); }, 600); }
@@ -563,7 +576,7 @@
     }
     $("#kcard").classList.add("badc");
     markSolution(false);
-    fb(r.mode === "check" ? "hint" : "bad", `${r.mode === "check" ? "Das üben wir noch. " : ""}Lösung: <b>${esc(K.solution(t))}</b><small>${esc(t.explain)}${it.repeat || r.mode === "check" ? "" : " · Die Aufgabe kommt gleich noch einmal."}</small>`);
+    fb(r.mode === "check" ? "hint" : "bad", `${r.mode === "check" ? "Das üben wir noch. " : ""}Lösung: <b>${esc(K.solution(t))}</b><small>${esc(t.explain)}</small>${it.boss ? "" : merkHtml(t.comp)}<small>${it.repeat || r.mode === "check" ? "" : " · Die Aufgabe kommt gleich noch einmal."}</small>`);
     // ein einziger Weiter-Knopf: bei Zahlen auf dem Ziffernblock, beim Schreiben im Formular, sonst darunter
     if (t.type === "num" || t.type === "nums") { const kok = $("#kok"); if (kok) { kok.textContent = "Weiter"; kok.id = "knx"; kok.classList.add("wide"); } }
     else if (t.type === "write") { const s = $("#kws"); if (s) { s.textContent = "Weiter"; s.id = "knx"; } }
@@ -746,6 +759,8 @@
       case "k-check": startCheck(); break;
       case "k-mission": startMission(); break;
       case "k-bonus": startBonus(); break;
+      case "k-mup": case "k-mdn": { const m = merkFor(v); if (m && !m.own) { KS().merk.vote[v + ":" + m.idx] = a === "k-mup" ? 1 : -1; save(); core.toast(a === "k-mup" ? "👍 Gemerkt! Die zeigen wir dir wieder." : "Okay, die zeigen wir nicht mehr."); const box = document.querySelector(".merk"); if (box) box.outerHTML = merkHtml(v); } break; }
+  case "k-mown": { const old = merkFor(v), t = window.prompt("Deine Eselsbrücke (kurz, gern albern):", old && old.own ? old.text : ""); if (t != null) { const txt = t.trim().slice(0, 160); if (txt) KS().merk.my[v] = txt; else delete KS().merk.my[v]; save(); core.toast(txt ? "🧠 Deine Eselsbrücke ist gespeichert!" : "Eigene Eselsbrücke gelöscht."); const box = document.querySelector(".merk"); if (box) box.outerHTML = merkHtml(v); } break; }
       case "k-area": startArea(v); break;
       case "k-konner": go("k-konner"); break;
       case "k-comp": startComp(v); break;
