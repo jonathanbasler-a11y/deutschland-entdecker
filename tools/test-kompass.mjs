@@ -251,6 +251,8 @@ req("../public/kompass-mathe2.js");
 // Zahlraum bis 1 Million (nach einer echten Klassenarbeit): jede Lösung unabhängig aus Text und Bild nachgerechnet
 req("../public/kompass-zahlraum.js");
 req("../public/kompass-original.js");
+const BEG = req("../public/kompass-begriffe.js");
+K.attachBank(BEG.BANK);
 {
   const ZR = ["ma.nachbarstelle", "ma.nachbarwahl", "ma.strahllesen", "ma.plaettchen", "ma.tafelwort", "ma.zahlwortschreiben", "ma.verwechsel"];
   const P = { Zehner: 10, Hunderter: 100, Tausender: 1000, Zehntausender: 10000, Hunderttausender: 100000 };
@@ -414,5 +416,46 @@ req("../public/kompass-merk.js");
   const side = (r) => r.map(([x, y]) => x + "," + y);
   ok(side([[0, 0], [1, 0], [2, 0], [3, 0], [0, -1], [1, -1]]).length === 6, "Beispiel für ungültiges Netz beschreibbar");
   ok(K.COMPS.filter((c) => !c.solo && /^(ma|de)\./.test(c.id)).filter((c) => !MERK[c.id]).length <= 10, "Fast jede Aufgabenart hat eine Eselsbrücke");
+}
+// Fachbegriffe (Wörterbuch): Aufgaben lösbar, kein Verraten, Beispiele und Umrechnungen stimmen
+{
+  const { TERMS, UMRECHNEN } = BEG;
+  ok(TERMS.length >= 45, "Begriffe: " + TERMS.length);
+  for (const t of TERMS) {
+    ok(!t.s.toLowerCase().includes(t.t.toLowerCase()), "Erklärung verrät den Begriff nicht: " + t.t);
+    ok(t.d.length > 20 && t.ex, "Erklärung und Beispiel: " + t.t);
+  }
+  ok(new Set(TERMS.map((t) => t.t)).size === TERMS.length, "Begriffe einmalig");
+  for (const id of ["de.begriffe", "ma.begriffe"]) {
+    const c = K.COMP[id];
+    ok(c && c.list.length >= 40, id + " hat Aufgaben");
+    for (let i = 0; i < c.list.length; i++) {
+      const t = K.task(id, i, 2);
+      ok(new Set(t.opts).size === t.opts.length && t.opts.length === 4, "vier verschiedene Antworten " + id + " " + i);
+      ok(K.check(t, t.ans).ok && K.solution(t) === t.opts[t.ans], "richtige Antwort wird erkannt " + id + " " + i);
+    }
+  }
+  // Rechenbegriffe: Rolle der Zahl im Beispiel unabhängig nachprüfen
+  const role = { Summand: (a, b, c) => [a, b], Summe: (a, b, c) => [c], Minuend: (a) => [a], Subtrahend: (a, b) => [b], Differenz: (a, b, c) => [c], Faktor: (a, b) => [a, b], Produkt: (a, b, c) => [c], Dividend: (a) => [a], Divisor: (a, b) => [b], Quotient: (a, b, c) => [c] };
+  for (const [name, f] of Object.entries(role)) {
+    const t = TERMS.find((x) => x.t === name), m = t.ex.match(/^(.*) in (\d+) ([+−·:]) (\d+) = (\d+)$/);
+    ok(m, "Beispiel lesbar: " + name);
+    const [a, op, b, c] = [+m[2], m[3], +m[4], +m[5]], res = op === "+" ? a + b : op === "−" ? a - b : op === "·" ? a * b : a / b;
+    ok(res === c, "Rechnung stimmt: " + t.ex);
+    const nums = (m[1].match(/\d+/g) || []).map(Number);
+    ok(nums.length === f(a, b, c).length && nums.every((n) => f(a, b, c).includes(n)), "Zahl hat die Rolle " + name);
+  }
+  // Umrechnungen
+  const U = { mm: 1, cm: 10, m: 1000, km: 1e6, mg: 1, g: 1000, kg: 1e6, t: 1e9, s: 1, min: 60, h: 3600, Tag: 86400, ml: 1, l: 1000 };
+  const val = (x) => { const m = x.trim().match(/^(½|¼|[\d.]+)\s*(\S+)$/); return (m[1] === "½" ? 0.5 : m[1] === "¼" ? 0.25 : +m[1].replace(/\./g, "")) * U[m[2]]; };
+  let nU = 0;
+  for (const [, list] of UMRECHNEN) for (const e of list) { const [l, r] = e.split(" = "); ok(Math.abs(val(l) - val(r)) < 1e-9, "Umrechnung stimmt: " + e); nU++; }
+  ok(nU >= 13, "Umrechnungen: " + nU);
+  // Spiegelachsen: Quadrat 4, Rechteck (2 : 1) 2, durch Spiegeln der Ecken an Linien durch die Mitte
+  const axes = (pts) => [0, 45, 90, 135].filter((deg) => { const a = (deg * Math.PI) / 90, c = Math.cos(a), s = Math.sin(a); return pts.every(([x, y]) => pts.some(([u, v]) => Math.abs(u - (x * c + y * s)) < 1e-9 && Math.abs(v - (x * s - y * c)) < 1e-9)); }).length;
+  ok(axes([[-1, -1], [1, -1], [1, 1], [-1, 1]]) === 4 && axes([[-2, -1], [2, -1], [2, 1], [-2, 1]]) === 2, "Spiegelachsen Quadrat 4, Rechteck 2");
+  ok(TERMS.find((x) => x.t === "Spiegelachse").d.includes("vier Spiegelachsen, ein Rechteck zwei"), "Wörterbuch nennt 4 und 2");
+  // Nachbarzahlen im Beispiel
+  ok(Math.floor(373 / 10) * 10 === 370 && Math.ceil(373 / 10) * 10 === 380 && Math.floor(373 / 100) * 100 === 300 && Math.ceil(373 / 100) * 100 === 400, "Nachbarzahlen 373");
 }
 console.log(`kompass ok (${n} Prüfungen)`);

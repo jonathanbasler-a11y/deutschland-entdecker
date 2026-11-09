@@ -458,6 +458,25 @@ for (const fach of ["de", "ma"]) {
   await ctx.close();
 }
 
+// 3h) Kompass-Wörterbuch: Begriffe nachlesen, Umrechnen, Begriffe üben
+{
+  const { ctx, p } = await fresh("2026-11-12", { width: 820, height: 1180 }, { kRoundLen: 3 });
+  await p.click('[data-act="k-woerter"]');
+  await p.waitForSelector(".woerter");
+  const w = await p.textContent(".woerter");
+  check(/Prädikat/.test(w) && /Quotient/.test(w) && /Spiegelachse/.test(w) && /Silbenkönige/.test(w) && /Umrechnen/.test(w) && /1 km = 1\.000 m/.test(w), "Wörterbuch zeigt Begriffe und Umrechnungen");
+  check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Wörterbuch hochkant: kein seitliches Scrollen");
+  await shot(p, "woerterbuch");
+  await p.click('.woerter [data-act="k-comp"][data-v="ma.begriffe"]');
+  await p.waitForSelector("#kcard");
+  check(/Begriff|bedeutet/.test(await p.textContent(".kqt")) && await p.locator(".kopts .opt").count() === 4, "Begriffe-Aufgabe mit vier Antworten");
+  await answer(p, true);
+  await p.waitForSelector(".feedback.ok");
+  check(await p.evaluate(() => window.__DE_K.KS().total >= 1), "Richtige Antwort wird gezählt");
+  check(p.errors.length === 0, "Wörterbuch ohne Fehler " + p.errors.join("|"));
+  await ctx.close();
+}
+
 // 4) Eltern-Übersicht und Hochformat
 {
   const { ctx, p } = await fresh("2026-11-07", { width: 820, height: 1180 });

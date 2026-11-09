@@ -49,6 +49,8 @@
     "ma.weitsprung": ["Vergleiche Weiten in derselben Einheit. Der Unterschied in Zentimetern: erst in cm umrechnen (1 m = 100 cm)."],
     "ma.eisdiele": ["Erst den Preis für eine Kugel suchen, dann malnehmen. Rückgeld = bezahlt minus Preis."],
     "ma.fahrplan": ["Lies Spalte für Spalte von oben nach unten, die Zeiten gehören zur Haltestelle der Zeile."],
+    "de.begriffe": ["Grundwort hinten, Bestimmungswort vorn: Sonnen|schirm, der Schirm bleibt der Chef.", "Subjekt: Wer oder was? Prädikat: Was tut …? Ort: Wo? Zeit: Wann?"],
+    "ma.begriffe": ["Plus: Summe. Minus: Differenz. Mal: Produkt. Geteilt: Quotient.", "Minuend steht vorn, Subtrahend hinten: Minuend − Subtrahend = Differenz."],
     "ma.sach": ["Gegeben, Gesucht, Rechnung, Antwort. Lies zweimal und schreibe die Antwort mit Einheit."],
     // ---- Mathe: Muster ----
     "ma.folge": ["Vergleiche immer zwei Nachbarzahlen: Ist der Sprung gleich? Oder wechselt er (+50, −20)?"],
